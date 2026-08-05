@@ -1,9 +1,14 @@
-import { autoUpdater } from "electron-updater"
+import { createRequire } from "node:module"
 import type { UpdateInfo } from "electron-updater"
 import type { UpdateStatus } from "@halcyon/ipc"
 import type { EventBus } from "../infra/events.ts"
 import type { JsonStore } from "../infra/json-store.ts"
 import type { Logger } from "../infra/logger.ts"
+
+// electron-updater is published as CommonJS, so the ESM main bundle cannot bind its
+// named exports. A require bridge resolves the real module object at runtime.
+const requireCjs = createRequire(import.meta.url)
+const { autoUpdater } = requireCjs("electron-updater") as typeof import("electron-updater")
 
 export type UpdateHistoryState = { installedVersions: string[] }
 
