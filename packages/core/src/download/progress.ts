@@ -71,10 +71,7 @@ export function formatBytes(bytes: number, fractionDigits = 1): string {
 	if (!Number.isFinite(bytes) || bytes <= 0) {
 		return "0 B"
 	}
-	const exponent = Math.min(
-		BYTE_UNITS.length - 1,
-		Math.floor(Math.log(bytes) / Math.log(1024)),
-	)
+	const exponent = Math.min(BYTE_UNITS.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)))
 	const value = bytes / 1024 ** exponent
 	const unit = BYTE_UNITS[exponent] ?? "B"
 	return `${value.toFixed(exponent === 0 ? 0 : fractionDigits)} ${unit}`

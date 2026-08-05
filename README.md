@@ -89,11 +89,11 @@ play offline.
 
 Grab the latest build from [Releases](https://github.com/jjbkl/YugiClient/releases):
 
-| Platform | File |
-| --- | --- |
-| Windows | `Halcyon-<version>-setup.exe` or `Halcyon-<version>-portable.exe` |
-| Linux | `Halcyon-<version>-x64.AppImage` or `Halcyon-<version>-x64.tar.gz` |
-| macOS | `Halcyon-<version>-x64.dmg` |
+| Platform | File                                                               |
+| -------- | ------------------------------------------------------------------ |
+| Windows  | `Halcyon-<version>-setup.exe` or `Halcyon-<version>-portable.exe`  |
+| Linux    | `Halcyon-<version>-x64.AppImage` or `Halcyon-<version>-x64.tar.gz` |
+| macOS    | `Halcyon-<version>-x64.dmg`                                        |
 
 Builds are currently unsigned, so Windows SmartScreen and macOS Gatekeeper will ask for
 confirmation on first launch.
@@ -107,13 +107,13 @@ npm install
 npm run dev
 ```
 
-| Command | Purpose |
-| --- | --- |
-| `npm run dev` | Hot-reloading development build |
-| `npm run verify` | Formatting, lint, type check and tests |
-| `npm test` | Zero-dependency test suite |
-| `npm run build` | Bundle main, preload and renderer |
-| `npm run package` | Installers for the current platform |
+| Command           | Purpose                                |
+| ----------------- | -------------------------------------- |
+| `npm run dev`     | Hot-reloading development build        |
+| `npm run verify`  | Formatting, lint, type check and tests |
+| `npm test`        | Zero-dependency test suite             |
+| `npm run build`   | Bundle main, preload and renderer      |
+| `npm run package` | Installers for the current platform    |
 
 Full instructions, environment variables and troubleshooting live in
 [`docs/build.md`](docs/build.md).

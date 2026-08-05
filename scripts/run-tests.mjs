@@ -31,7 +31,9 @@ async function collect(directory) {
 	return files
 }
 
-const testFiles = (await Promise.all(searchRoots.map((directory) => collect(join(root, directory)))))
+const testFiles = (
+	await Promise.all(searchRoots.map((directory) => collect(join(root, directory))))
+)
 	.flat()
 	.sort()
 
@@ -42,11 +44,7 @@ if (testFiles.length === 0) {
 
 console.log(`Running ${testFiles.length} test files with the Node test runner.`)
 
-const args = [
-	"--test",
-	...process.argv.slice(2),
-	...testFiles.map((file) => relative(root, file)),
-]
+const args = ["--test", ...process.argv.slice(2), ...testFiles.map((file) => relative(root, file))]
 
 const child = spawn(process.execPath, args, { cwd: root, stdio: "inherit" })
 

@@ -10,10 +10,7 @@ import type { Artifact, FeatureSet, HostPlatform, Library } from "./types.ts"
 
 export const DEFAULT_LIBRARY_REPOSITORY = "https://libraries.minecraft.net/"
 
-export function nativeClassifier(
-	library: Library,
-	platform: HostPlatform,
-): string | undefined {
+export function nativeClassifier(library: Library, platform: HostPlatform): string | undefined {
 	const natives = library.natives
 	if (natives === undefined) {
 		return undefined
@@ -108,9 +105,7 @@ export function resolveLibraries(
 	return resolved
 }
 
-export function dedupeLibrariesByArtifact(
-	libraries: readonly Library[],
-): readonly Library[] {
+export function dedupeLibrariesByArtifact(libraries: readonly Library[]): readonly Library[] {
 	const byKey = new Map<string, Library>()
 	const ordered: Library[] = []
 

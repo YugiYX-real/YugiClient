@@ -1,12 +1,4 @@
-import {
-	cp,
-	mkdir,
-	readdir,
-	readFile,
-	rm,
-	stat,
-	writeFile,
-} from "node:fs/promises"
+import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { join, relative, sep } from "node:path"
 import { unzipSync, zipSync } from "fflate"
 
@@ -42,7 +34,10 @@ export async function directorySize(target: string): Promise<number> {
 	return total
 }
 
-export async function listFiles(directory: string, extensions?: readonly string[]): Promise<string[]> {
+export async function listFiles(
+	directory: string,
+	extensions?: readonly string[],
+): Promise<string[]> {
 	try {
 		const entries = await readdir(directory, { withFileTypes: true })
 		return entries
@@ -86,7 +81,9 @@ export async function zipDirectory(source: string, archivePath: string): Promise
 
 	const payload: Record<string, Uint8Array> = {}
 	for (const relativePath of files) {
-		payload[relativePath] = new Uint8Array(await readFile(join(source, ...relativePath.split("/"))))
+		payload[relativePath] = new Uint8Array(
+			await readFile(join(source, ...relativePath.split("/"))),
+		)
 	}
 
 	const archive = zipSync(payload, { level: 6 })
@@ -95,7 +92,10 @@ export async function zipDirectory(source: string, archivePath: string): Promise
 	return archive.byteLength
 }
 
-export async function unzipToDirectory(archivePath: string, destination: string): Promise<string[]> {
+export async function unzipToDirectory(
+	archivePath: string,
+	destination: string,
+): Promise<string[]> {
 	const archive = new Uint8Array(await readFile(archivePath))
 	const entries = unzipSync(archive)
 	const written: string[] = []

@@ -94,7 +94,11 @@ export function SkinsPage(): JSX.Element {
 				<Card>
 					<SectionHeader title="Live preview" subtitle="Drag to rotate the model" />
 					{active === undefined ? (
-						<EmptyState icon="skins" title="No skin selected" description="Add a skin to see it here." />
+						<EmptyState
+							icon="skins"
+							title="No skin selected"
+							description="Add a skin to see it here."
+						/>
 					) : (
 						<>
 							<SkinPreview dataUrl={active.dataUrl} model={active.model} />
@@ -103,7 +107,9 @@ export function SkinsPage(): JSX.Element {
 								<Badge>{active.model}</Badge>
 								<Badge>{active.source}</Badge>
 								{active.appliedAt === null ? null : (
-									<Badge tone="success">applied {formatDate(active.appliedAt)}</Badge>
+									<Badge tone="success">
+										applied {formatDate(active.appliedAt)}
+									</Badge>
 								)}
 							</div>
 							<div className="row wrap" style={{ marginTop: 12 }}>
@@ -121,7 +127,11 @@ export function SkinsPage(): JSX.Element {
 								<Button
 									icon="star"
 									onClick={() => {
-										void invoke("skins:favorite", active.id, !active.favorite).then(skins.reload)
+										void invoke(
+											"skins:favorite",
+											active.id,
+											!active.favorite,
+										).then(skins.reload)
 									}}
 								>
 									{active.favorite ? "Unfavourite" : "Favourite"}
@@ -147,13 +157,19 @@ export function SkinsPage(): JSX.Element {
 				</Card>
 
 				<Card>
-					<SectionHeader title="Wardrobe" subtitle={`${entries.length} skins in your history`} />
+					<SectionHeader
+						title="Wardrobe"
+						subtitle={`${entries.length} skins in your history`}
+					/>
 					<DropZone
 						label="Drop a 64x64 skin PNG here"
 						onFiles={(paths) => {
 							const first = paths[0]
 							if (first !== undefined) {
-								void invoke("skins:upload", { model: uploadModel, filePath: first }).then(skins.reload)
+								void invoke("skins:upload", {
+									model: uploadModel,
+									filePath: first,
+								}).then(skins.reload)
 							}
 						}}
 					/>
@@ -188,7 +204,9 @@ export function SkinsPage(): JSX.Element {
 											background: "var(--surface-3)",
 										}}
 									/>
-									<div style={{ marginTop: 8, fontSize: "0.8rem" }}>{entry.name}</div>
+									<div style={{ marginTop: 8, fontSize: "0.8rem" }}>
+										{entry.name}
+									</div>
 									{entry.favorite ? <Badge tone="accent">favourite</Badge> : null}
 								</button>
 							))}
@@ -227,13 +245,21 @@ export function SkinsPage(): JSX.Element {
 					}
 				>
 					<Field label="Name" hint="Optional label for your wardrobe">
-						<TextInput value={uploadName} onChange={setUploadName} placeholder="Winter cloak" />
+						<TextInput
+							value={uploadName}
+							onChange={setUploadName}
+							placeholder="Winter cloak"
+						/>
 					</Field>
 					<Field label="Model">
 						<Select value={uploadModel} onChange={setUploadModel} options={MODELS} />
 					</Field>
 					<Field label="File" hint="Leave empty to open a file picker">
-						<TextInput value={uploadPath} onChange={setUploadPath} placeholder="C:\\skins\\my-skin.png" />
+						<TextInput
+							value={uploadPath}
+							onChange={setUploadPath}
+							placeholder="C:\\skins\\my-skin.png"
+						/>
 					</Field>
 					<DropZone
 						label="or drop the PNG here"

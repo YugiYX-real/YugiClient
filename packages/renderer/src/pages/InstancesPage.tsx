@@ -54,7 +54,10 @@ function CreateInstanceModal({
 	const [busy, setBusy] = useState(false)
 
 	const versions = useAsync<readonly VersionEntry[]>(
-		() => invoke("versions:list", { channels: showSnapshots ? ["release", "snapshot"] : ["release"] }),
+		() =>
+			invoke("versions:list", {
+				channels: showSnapshots ? ["release", "snapshot"] : ["release"],
+			}),
 		[showSnapshots],
 	)
 
@@ -140,7 +143,11 @@ function CreateInstanceModal({
 			<Field label="Minecraft version">
 				<div className="col">
 					<div className="row">
-						<SearchInput value={search} onChange={setSearch} placeholder="Search versions" />
+						<SearchInput
+							value={search}
+							onChange={setSearch}
+							placeholder="Search versions"
+						/>
 						<Button
 							size="small"
 							variant={showSnapshots ? "primary" : "ghost"}
@@ -162,7 +169,9 @@ function CreateInstanceModal({
 								<button
 									key={entry.id}
 									type="button"
-									className={entry.id === gameVersion ? "list-row selected" : "list-row"}
+									className={
+										entry.id === gameVersion ? "list-row selected" : "list-row"
+									}
 									style={{ border: "none", cursor: "pointer", textAlign: "left" }}
 									onClick={() => {
 										setGameVersion(entry.id)
@@ -171,7 +180,9 @@ function CreateInstanceModal({
 								>
 									<strong style={{ minWidth: 110 }}>{entry.id}</strong>
 									<Badge>{entry.channel}</Badge>
-									{entry.installed ? <Badge tone="success">installed</Badge> : null}
+									{entry.installed ? (
+										<Badge tone="success">installed</Badge>
+									) : null}
 									<span className="spacer" />
 									<small>Java {entry.requiredJavaMajor}</small>
 								</button>
@@ -183,7 +194,10 @@ function CreateInstanceModal({
 
 			<div className="grid cols-2">
 				{loader === "vanilla" ? null : (
-					<Field label="Loader version" hint="Leave on recommended unless a modpack needs otherwise">
+					<Field
+						label="Loader version"
+						hint="Leave on recommended unless a modpack needs otherwise"
+					>
 						<Select
 							value={loaderVersion}
 							onChange={setLoaderVersion}
@@ -191,14 +205,22 @@ function CreateInstanceModal({
 								{ value: "", label: "Recommended" },
 								...(loaderVersions.data ?? []).map((version) => ({
 									value: version.id,
-									label: version.recommended ? `${version.id} (recommended)` : version.id,
+									label: version.recommended
+										? `${version.id} (recommended)`
+										: version.id,
 								})),
 							]}
 						/>
 					</Field>
 				)}
 				<Field label="Memory (MB)" hint="Halcyon suggests a value based on your system">
-					<NumberInput value={memoryMb} onChange={setMemoryMb} min={512} max={32768} step={256} />
+					<NumberInput
+						value={memoryMb}
+						onChange={setMemoryMb}
+						min={512}
+						max={32768}
+						step={256}
+					/>
 				</Field>
 			</div>
 		</Modal>
@@ -211,7 +233,9 @@ export function InstancesPage({ onOpen }: { onOpen: (instanceId: string) => void
 	const [loaderFilter, setLoaderFilter] = useState<LoaderId | "all">("all")
 	const [sort, setSort] = useState<SortKey>("recent")
 	const [creating, setCreating] = useState(false)
-	const [menu, setMenu] = useState<{ x: number; y: number; instance: InstanceSummary } | null>(null)
+	const [menu, setMenu] = useState<{ x: number; y: number; instance: InstanceSummary } | null>(
+		null,
+	)
 	const [renaming, setRenaming] = useState<InstanceSummary | null>(null)
 	const [renameValue, setRenameValue] = useState("")
 	const [deleting, setDeleting] = useState<InstanceSummary | null>(null)
@@ -399,24 +423,37 @@ export function InstancesPage({ onOpen }: { onOpen: (instanceId: string) => void
 								style={
 									instance.background === null
 										? undefined
-										: { backgroundImage: `url("file://${instance.background}")` }
+										: {
+												backgroundImage: `url("file://${instance.background}")`,
+											}
 								}
 							>
-								{instance.background === null ? (instance.icon ?? initialsOf(instance.name)) : null}
+								{instance.background === null
+									? (instance.icon ?? initialsOf(instance.name))
+									: null}
 							</div>
 							<div className="row between">
 								<strong>{instance.name}</strong>
-								{instance.favorite ? <Badge tone="accent" icon="star">Pinned</Badge> : null}
+								{instance.favorite ? (
+									<Badge tone="accent" icon="star">
+										Pinned
+									</Badge>
+								) : null}
 							</div>
 							<div className="row wrap" style={{ gap: 6 }}>
 								<Badge>{instance.gameVersion}</Badge>
 								<Badge>{instance.loader}</Badge>
-								{instance.modCount > 0 ? <Badge>{instance.modCount} mods</Badge> : null}
+								{instance.modCount > 0 ? (
+									<Badge>{instance.modCount} mods</Badge>
+								) : null}
 								{instance.running ? <Badge tone="success">running</Badge> : null}
-								{instance.installed ? null : <Badge tone="warning">not installed</Badge>}
+								{instance.installed ? null : (
+									<Badge tone="warning">not installed</Badge>
+								)}
 							</div>
 							<small>
-								{formatPlaytime(instance.playtimeMinutes)} · {formatBytes(instance.sizeBytes)} ·{" "}
+								{formatPlaytime(instance.playtimeMinutes)} ·{" "}
+								{formatBytes(instance.sizeBytes)} ·{" "}
 								{formatRelative(instance.lastPlayedAt)}
 							</small>
 							<div className="row">

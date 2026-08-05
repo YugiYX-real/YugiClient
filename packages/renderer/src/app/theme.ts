@@ -91,7 +91,8 @@ export function applyTheme(settings: Settings): void {
 		"--radius-lg": `${Math.round(settings.cornerRadius * 1.6)}px`,
 		"--glass": `rgba(${settings.theme === "light" ? "255, 255, 255" : "255, 255, 255"}, ${settings.transparency.toFixed(3)})`,
 		"--ui-scale": settings.uiScale.toFixed(3),
-		"--motion": settings.animations === "off" ? "0" : settings.animations === "reduced" ? "0.5" : "1",
+		"--motion":
+			settings.animations === "off" ? "0" : settings.animations === "reduced" ? "0.5" : "1",
 		"--wallpaper": settings.wallpaper === null ? "none" : `url("file://${settings.wallpaper}")`,
 	}
 

@@ -164,7 +164,10 @@ export async function createContainer(options: {
 	})
 
 	const skins = new SkinService({
-		store: new JsonStore<SkinState>({ filePath: paths.skinsFile, defaults: DEFAULT_SKIN_STATE }),
+		store: new JsonStore<SkinState>({
+			filePath: paths.skinsFile,
+			defaults: DEFAULT_SKIN_STATE,
+		}),
 		paths,
 		http,
 		auth,

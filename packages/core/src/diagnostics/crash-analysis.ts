@@ -108,7 +108,8 @@ const SIGNATURES: readonly Signature[] = [
 		id: "gl-unsupported",
 		title: "Graphics driver could not provide a usable OpenGL context",
 		severity: "fatal",
-		pattern: /(Pixel format not accelerated|Failed to create window|GLFW error 65542|No OpenGL context)/i,
+		pattern:
+			/(Pixel format not accelerated|Failed to create window|GLFW error 65542|No OpenGL context)/i,
 		confidence: 0.85,
 		explain: () =>
 			"The game could not create an accelerated OpenGL context. This is a driver or GPU-selection problem rather than a mod problem.",
@@ -122,7 +123,8 @@ const SIGNATURES: readonly Signature[] = [
 		id: "native-crash",
 		title: "The JVM crashed inside a native library",
 		severity: "fatal",
-		pattern: /EXCEPTION_ACCESS_VIOLATION|A fatal error has been detected by the Java Runtime Environment/i,
+		pattern:
+			/EXCEPTION_ACCESS_VIOLATION|A fatal error has been detected by the Java Runtime Environment/i,
 		confidence: 0.8,
 		explain: () =>
 			"The crash happened in native code, most often a graphics driver, an audio driver, or an overlay injecting itself into the process.",
@@ -136,7 +138,8 @@ const SIGNATURES: readonly Signature[] = [
 		id: "invalid-session",
 		title: "The Minecraft session was rejected",
 		severity: "error",
-		pattern: /(Invalid session|Failed to login: The authentication servers|Invalid Session \(Try restarting)/i,
+		pattern:
+			/(Invalid session|Failed to login: The authentication servers|Invalid Session \(Try restarting)/i,
 		confidence: 0.9,
 		explain: () =>
 			"The access token used to join servers was expired or rejected. Tokens are short lived and must be refreshed.",
@@ -149,7 +152,8 @@ const SIGNATURES: readonly Signature[] = [
 		id: "network-unreachable",
 		title: "A required host could not be reached",
 		severity: "error",
-		pattern: /java\.net\.(UnknownHostException|ConnectException|SocketTimeoutException)(?::\s*(\S+))?/,
+		pattern:
+			/java\.net\.(UnknownHostException|ConnectException|SocketTimeoutException)(?::\s*(\S+))?/,
 		confidence: 0.75,
 		explain: (match) =>
 			`Networking failed (${match[1] ?? "connection error"}${match[2] === undefined ? "" : ` for ${match[2]}`}). Downloads and authentication both need outbound HTTPS.`,
@@ -162,7 +166,8 @@ const SIGNATURES: readonly Signature[] = [
 		id: "corrupted-jar",
 		title: "A jar or zip file on disk is damaged",
 		severity: "fatal",
-		pattern: /(zip file is empty|Invalid or corrupt jarfile|error in opening zip file|ZipException)/i,
+		pattern:
+			/(zip file is empty|Invalid or corrupt jarfile|error in opening zip file|ZipException)/i,
 		confidence: 0.85,
 		explain: () =>
 			"A downloaded archive is truncated or corrupt, usually from an interrupted download or an aggressive antivirus.",

@@ -5,7 +5,13 @@ import type { BackupEntry } from "@halcyon/ipc"
 import type { EventBus } from "../infra/events.ts"
 import type { JsonStore } from "../infra/json-store.ts"
 import type { Logger } from "../infra/logger.ts"
-import { pathExists, removePath, sanitiseFileName, unzipToDirectory, zipDirectory } from "../infra/fs-extra.ts"
+import {
+	pathExists,
+	removePath,
+	sanitiseFileName,
+	unzipToDirectory,
+	zipDirectory,
+} from "../infra/fs-extra.ts"
 import type { AppPaths } from "../infra/paths.ts"
 import type { InstanceService } from "./instance-service.ts"
 
@@ -114,7 +120,10 @@ export class BackupService {
 		this.events.emit("instances:changed", { instanceId })
 	}
 
-	async writeManifest(instanceId: string, payload: Readonly<Record<string, unknown>>): Promise<void> {
+	async writeManifest(
+		instanceId: string,
+		payload: Readonly<Record<string, unknown>>,
+	): Promise<void> {
 		const target = join(this.instances.directory(instanceId), "halcyon.state.json")
 		await writeFile(target, `${JSON.stringify(payload, null, "\t")}\n`, "utf8")
 	}

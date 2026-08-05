@@ -147,7 +147,11 @@ export class HttpClient {
 		return new Uint8Array(await response.arrayBuffer())
 	}
 
-	async download(url: string, destination: string, options: DownloadOptions = {}): Promise<number> {
+	async download(
+		url: string,
+		destination: string,
+		options: DownloadOptions = {},
+	): Promise<number> {
 		if (options.skipIfValid !== false && (await this.isValid(destination, options))) {
 			const info = await stat(destination)
 			options.onProgress?.(info.size, info.size)

@@ -201,7 +201,7 @@ export type IpcEventMap = {
 	"updates:changed": UpdateStatus
 	"launch:progress": LaunchProgress
 	"logs:appended": LogsAppendedEvent
-	"toast": Toast
+	toast: Toast
 }
 
 export type IpcEvent = keyof IpcEventMap

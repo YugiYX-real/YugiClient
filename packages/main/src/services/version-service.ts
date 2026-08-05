@@ -116,7 +116,9 @@ export class VersionService {
 	async manifest(force = false): Promise<readonly ManifestVersion[]> {
 		const state = await this.store.read()
 		const age =
-			state.cachedAt === null ? Number.POSITIVE_INFINITY : Date.now() - Date.parse(state.cachedAt)
+			state.cachedAt === null
+				? Number.POSITIVE_INFINITY
+				: Date.now() - Date.parse(state.cachedAt)
 
 		if (!force && state.manifest.length > 0 && age < MANIFEST_TTL_MS) {
 			return state.manifest
@@ -457,7 +459,10 @@ export class VersionService {
 		}
 	}
 
-	async materialiseLegacyAssets(version: VersionJson, gameDirectory: string): Promise<string | undefined> {
+	async materialiseLegacyAssets(
+		version: VersionJson,
+		gameDirectory: string,
+	): Promise<string | undefined> {
 		const index = await this.assetIndex(version)
 		if (index === undefined) {
 			return undefined

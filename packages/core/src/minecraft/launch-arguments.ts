@@ -1,11 +1,6 @@
 import { isAllowedByRules } from "./rules.ts"
 import { resolveLibraries } from "./libraries.ts"
-import type {
-	ArgumentEntry,
-	FeatureSet,
-	HostPlatform,
-	VersionJson,
-} from "./types.ts"
+import type { ArgumentEntry, FeatureSet, HostPlatform, VersionJson } from "./types.ts"
 
 export type UserType = "msa" | "mojang" | "legacy"
 
@@ -151,7 +146,10 @@ export function buildClasspath(request: LaunchRequest): readonly string[] {
 	const separator = platform.os === "windows" ? "\\" : "/"
 	const entries = resolveLibraries(version.libraries, platform, buildFeatureSet(request))
 		.filter((entry) => !entry.native)
-		.map((entry) => `${paths.librariesDir}${separator}${entry.relativePath.replaceAll("/", separator)}`)
+		.map(
+			(entry) =>
+				`${paths.librariesDir}${separator}${entry.relativePath.replaceAll("/", separator)}`,
+		)
 
 	return [...entries, paths.clientJar]
 }
@@ -262,9 +260,7 @@ export function buildLaunchInvocation(request: LaunchRequest): LaunchInvocation 
 		variables,
 	)
 
-	const userJvmArgs = (request.extraJvmArgs ?? []).filter(
-		(arg) => !MEMORY_FLAG_PATTERN.test(arg),
-	)
+	const userJvmArgs = (request.extraJvmArgs ?? []).filter((arg) => !MEMORY_FLAG_PATTERN.test(arg))
 
 	const loggingArgs =
 		request.log4jConfigPath === undefined || version.logging?.client === undefined

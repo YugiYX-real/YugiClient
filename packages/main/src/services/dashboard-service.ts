@@ -112,7 +112,9 @@ export class DashboardService {
 
 		const recent = [...instances]
 			.filter((instance) => instance.lastPlayedAt !== null)
-			.sort((left, right) => (left.lastPlayedAt ?? "") < (right.lastPlayedAt ?? "") ? 1 : -1)
+			.sort((left, right) =>
+				(left.lastPlayedAt ?? "") < (right.lastPlayedAt ?? "") ? 1 : -1,
+			)
 			.slice(0, 6)
 
 		const selected: Account | null =

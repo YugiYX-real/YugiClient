@@ -9,7 +9,10 @@ export type AsyncState<T> = {
 	reload: () => void
 }
 
-export function useAsync<T>(loader: () => Promise<T>, dependencies: readonly unknown[]): AsyncState<T> {
+export function useAsync<T>(
+	loader: () => Promise<T>,
+	dependencies: readonly unknown[],
+): AsyncState<T> {
 	const [data, setData] = useState<T | undefined>(undefined)
 	const [error, setError] = useState<string | null>(null)
 	const [loading, setLoading] = useState(true)

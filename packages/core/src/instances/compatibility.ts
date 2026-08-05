@@ -74,9 +74,7 @@ function direction(from: string, to: string): VersionChangeAssessment["direction
 	return comparison === 0 ? "same" : comparison < 0 ? "upgrade" : "downgrade"
 }
 
-export function assessVersionChange(
-	request: VersionChangeRequest,
-): VersionChangeAssessment {
+export function assessVersionChange(request: VersionChangeRequest): VersionChangeAssessment {
 	const warnings: CompatibilityWarning[] = []
 	const changeDirection = direction(request.fromVersion, request.toVersion)
 
@@ -101,8 +99,7 @@ export function assessVersionChange(
 			code: "loader-family-change",
 			severity: "blocker",
 			message: `Switching from ${request.fromLoader} to ${request.toLoader} changes the mod format`,
-			detail:
-				"Mods cannot carry over between these loader families. Existing mods will be disabled rather than deleted.",
+			detail: "Mods cannot carry over between these loader families. Existing mods will be disabled rather than deleted.",
 		})
 	} else if (request.fromLoader !== request.toLoader) {
 		warnings.push({
@@ -157,7 +154,16 @@ export function assessVersionChange(
 export function recommendedMemoryMb(totalSystemMb: number, modCount: number): number {
 	const reserveForOs = Math.max(2048, Math.round(totalSystemMb * 0.25))
 	const available = Math.max(1024, totalSystemMb - reserveForOs)
-	const base = modCount === 0 ? 2048 : modCount < 50 ? 3072 : modCount < 150 ? 4096 : modCount < 300 ? 6144 : 8192
+	const base =
+		modCount === 0
+			? 2048
+			: modCount < 50
+				? 3072
+				: modCount < 150
+					? 4096
+					: modCount < 300
+						? 6144
+						: 8192
 	const capped = Math.min(base, available, 8192)
 	return Math.round(capped / 512) * 512
 }

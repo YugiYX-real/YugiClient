@@ -151,7 +151,10 @@ export class UpdateService {
 	async rollback(): Promise<UpdateStatus> {
 		const previous = await this.previousVersion()
 		if (previous === undefined) {
-			this.patch({ state: "error", error: "No previous version is recorded for this install" })
+			this.patch({
+				state: "error",
+				error: "No previous version is recorded for this install",
+			})
 			return this.state
 		}
 

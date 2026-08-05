@@ -81,7 +81,10 @@ export class StatisticsService {
 		}
 
 		return {
-			totalPlaytimeMinutes: configs.reduce((total, config) => total + config.playtimeMinutes, 0),
+			totalPlaytimeMinutes: configs.reduce(
+				(total, config) => total + config.playtimeMinutes,
+				0,
+			),
 			launchCount: configs.reduce((total, config) => total + config.launchCount, 0),
 			instanceCount: configs.length,
 			installedVersionCount: installed.length,

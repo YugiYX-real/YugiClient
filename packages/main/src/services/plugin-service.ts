@@ -1,13 +1,7 @@
 import { readdir, readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { pathToFileURL } from "node:url"
-import type {
-	InstanceSummary,
-	PluginCard,
-	PluginInfo,
-	Settings,
-	ToastKind,
-} from "@halcyon/ipc"
+import type { InstanceSummary, PluginCard, PluginInfo, Settings, ToastKind } from "@halcyon/ipc"
 import type { EventBus } from "../infra/events.ts"
 import type { JsonStore } from "../infra/json-store.ts"
 import type { Logger } from "../infra/logger.ts"
@@ -39,7 +33,11 @@ export type PluginHostEvent =
 	| "settings:changed"
 
 export type PluginContext = {
-	readonly launcher: { readonly name: string; readonly version: string; readonly apiVersion: number }
+	readonly launcher: {
+		readonly name: string
+		readonly version: string
+		readonly apiVersion: number
+	}
 	readonly plugin: { readonly id: string; readonly directory: string }
 	log(message: string): void
 	on(event: PluginHostEvent, listener: (payload: unknown) => void): void
@@ -118,9 +116,17 @@ export class PluginService {
 		return found
 	}
 
-	private context(manifest: PluginManifest, directory: string, record: LoadedPlugin): PluginContext {
+	private context(
+		manifest: PluginManifest,
+		directory: string,
+		record: LoadedPlugin,
+	): PluginContext {
 		return {
-			launcher: { name: "Halcyon", version: this.host.appVersion, apiVersion: PLUGIN_API_VERSION },
+			launcher: {
+				name: "Halcyon",
+				version: this.host.appVersion,
+				apiVersion: PLUGIN_API_VERSION,
+			},
 			plugin: { id: manifest.id, directory },
 			log: (message: string) => {
 				this.logger.info(`[${manifest.id}] ${message}`)

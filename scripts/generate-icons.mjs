@@ -17,7 +17,10 @@ const ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]
 
 async function renderPng(svg, size, destination) {
 	await mkdir(dirname(destination), { recursive: true })
-	const buffer = await sharp(svg, { density: 512 }).resize(size, size).png({ compressionLevel: 9 }).toBuffer()
+	const buffer = await sharp(svg, { density: 512 })
+		.resize(size, size)
+		.png({ compressionLevel: 9 })
+		.toBuffer()
 	await writeFile(destination, buffer)
 	return buffer
 }

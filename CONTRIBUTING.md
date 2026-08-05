@@ -27,13 +27,13 @@ test suite. CI runs exactly the same commands on Ubuntu, Windows and macOS, so a
 
 ## Where code belongs
 
-| Change | Package |
-| --- | --- |
-| Pure logic: version resolution, rules, argument building, diagnostics, queues | `packages/core` |
-| A new IPC channel or event | `packages/ipc`, then a handler in `packages/main` |
-| Filesystem, network, process or Electron work | `packages/main` |
-| Interface, styling, screens | `packages/renderer` |
-| Types third-party plugins compile against | `packages/plugin-sdk` |
+| Change                                                                        | Package                                           |
+| ----------------------------------------------------------------------------- | ------------------------------------------------- |
+| Pure logic: version resolution, rules, argument building, diagnostics, queues | `packages/core`                                   |
+| A new IPC channel or event                                                    | `packages/ipc`, then a handler in `packages/main` |
+| Filesystem, network, process or Electron work                                 | `packages/main`                                   |
+| Interface, styling, screens                                                   | `packages/renderer`                               |
+| Types third-party plugins compile against                                     | `packages/plugin-sdk`                             |
 
 Rules that keep the architecture honest:
 
@@ -52,7 +52,7 @@ Prettier and ESLint own formatting, so do not hand-tune it. Beyond that:
 
 - Tabs, no semicolons, double quotes — whatever `npm run format` produces.
 - Prefer explicit names over abbreviations, and early returns over nesting.
-- Comment *why*, never *what*. Delete dead code instead of commenting it out.
+- Comment _why_, never _what_. Delete dead code instead of commenting it out.
 - Handle errors where you can act on them; otherwise let them bubble to the IPC layer,
   which surfaces them to the user.
 - No `any`. Narrow unknown data at the boundary instead.

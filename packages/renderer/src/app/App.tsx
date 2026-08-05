@@ -168,7 +168,11 @@ export function App(): JSX.Element {
 					if (settings !== undefined) {
 						void update({
 							theme:
-								settings.theme === "dark" ? "light" : settings.theme === "light" ? "amoled" : "dark",
+								settings.theme === "dark"
+									? "light"
+									: settings.theme === "light"
+										? "amoled"
+										: "dark",
 						})
 					}
 				},
@@ -182,7 +186,9 @@ export function App(): JSX.Element {
 		const needle = quickSearch.trim().toLowerCase()
 		return needle === ""
 			? []
-			: instances.filter((instance) => instance.name.toLowerCase().includes(needle)).slice(0, 5)
+			: instances
+					.filter((instance) => instance.name.toLowerCase().includes(needle))
+					.slice(0, 5)
 	}, [instances, quickSearch])
 
 	const heading =
@@ -218,7 +224,10 @@ export function App(): JSX.Element {
 								placeholder="Jump to an instance"
 							/>
 							{quickMatches.length === 0 ? null : (
-								<div className="context-menu" style={{ position: "absolute", top: 42, right: 0 }}>
+								<div
+									className="context-menu"
+									style={{ position: "absolute", top: 42, right: 0 }}
+								>
 									{quickMatches.map((instance) => (
 										<button
 											key={instance.id}

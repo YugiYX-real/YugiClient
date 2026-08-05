@@ -2,13 +2,7 @@ import { copyFile, mkdir, rename, stat } from "node:fs/promises"
 import { basename, join } from "node:path"
 import { findDuplicateProjects, resolveInstallPlan } from "@halcyon/core"
 import type { InstalledContent, ResolutionTarget } from "@halcyon/core"
-import type {
-	ContentEntry,
-	ContentKind,
-	InstallOutcome,
-	ModAnalysis,
-	ModIssue,
-} from "@halcyon/ipc"
+import type { ContentEntry, ContentKind, InstallOutcome, ModAnalysis, ModIssue } from "@halcyon/ipc"
 import type { EventBus } from "../infra/events.ts"
 import type { Logger } from "../infra/logger.ts"
 import type { HttpClient } from "../infra/http.ts"
@@ -128,7 +122,9 @@ export class ContentService {
 
 		const entries: ContentEntry[] = []
 		for (const fileName of files) {
-			const record = records.find((candidate) => baseName(candidate.fileName) === baseName(fileName))
+			const record = records.find(
+				(candidate) => baseName(candidate.fileName) === baseName(fileName),
+			)
 			const info = await stat(join(directory, fileName)).catch(() => undefined)
 			const metadata =
 				record ?? (await this.readJarMetadata(join(directory, fileName), fileName, kind))
@@ -146,7 +142,8 @@ export class ContentService {
 				versionId: metadata.versionId,
 				iconUrl: metadata.iconUrl,
 				updateAvailable:
-					metadata.latestVersionId !== null && metadata.latestVersionId !== metadata.versionId,
+					metadata.latestVersionId !== null &&
+					metadata.latestVersionId !== metadata.versionId,
 				latestVersionId: metadata.latestVersionId,
 				latestVersionName: metadata.latestVersionName,
 				gameVersions: metadata.gameVersions,
@@ -196,7 +193,9 @@ export class ContentService {
 					author: typeof author === "string" ? author : (author?.name ?? null),
 					loaders: ["fabric"],
 					dependencies: Object.keys(parsed.depends ?? {})
-						.filter((id) => id !== "minecraft" && id !== "java" && id !== "fabricloader")
+						.filter(
+							(id) => id !== "minecraft" && id !== "java" && id !== "fabricloader",
+						)
 						.map((id) => ({ projectId: id, kind: "required" })),
 				}
 			} catch {
@@ -239,9 +238,11 @@ export class ContentService {
 			if (target === fileName) {
 				continue
 			}
-			await rename(join(directory, fileName), join(directory, target)).catch((error: unknown) => {
-				this.logger.warn(`Could not toggle ${fileName}`, error)
-			})
+			await rename(join(directory, fileName), join(directory, target)).catch(
+				(error: unknown) => {
+					this.logger.warn(`Could not toggle ${fileName}`, error)
+				},
+			)
 		}
 		this.events.emit("instances:changed", { instanceId })
 	}
@@ -257,7 +258,8 @@ export class ContentService {
 		}
 		await this.index(instanceId).update((current) => ({
 			records: current.records.filter(
-				(record) => !fileNames.some((fileName) => baseName(fileName) === baseName(record.fileName)),
+				(record) =>
+					!fileNames.some((fileName) => baseName(fileName) === baseName(record.fileName)),
 			),
 		}))
 		this.events.emit("instances:changed", { instanceId })
@@ -280,7 +282,9 @@ export class ContentService {
 				await copyFile(sourcePath, join(directory, fileName))
 				installed.push(fileName)
 			} catch (error) {
-				problems.push(`${fileName}: ${error instanceof Error ? error.message : String(error)}`)
+				problems.push(
+					`${fileName}: ${error instanceof Error ? error.message : String(error)}`,
+				)
 			}
 		}
 
@@ -299,7 +303,11 @@ export class ContentService {
 
 		const root = await this.modrinth.getVersion(versionId)
 		if (root === undefined) {
-			return { installed: [], skipped: [], problems: [`Unknown Modrinth version ${versionId}`] }
+			return {
+				installed: [],
+				skipped: [],
+				problems: [`Unknown Modrinth version ${versionId}`],
+			}
 		}
 
 		const installedRecords = await this.installedContent(instanceId)
@@ -324,7 +332,9 @@ export class ContentService {
 					sha1: version.sha1,
 					expectedSize: version.fileSize,
 				})
-				const project = await this.modrinth.project(version.projectId).catch(() => undefined)
+				const project = await this.modrinth
+					.project(version.projectId)
+					.catch(() => undefined)
 				await this.record(instanceId, {
 					fileName: version.fileName,
 					kind,
@@ -346,7 +356,9 @@ export class ContentService {
 				})
 				installed.push(version.fileName)
 			} catch (error) {
-				problems.push(`${version.name}: ${error instanceof Error ? error.message : String(error)}`)
+				problems.push(
+					`${version.name}: ${error instanceof Error ? error.message : String(error)}`,
+				)
 			}
 		}
 

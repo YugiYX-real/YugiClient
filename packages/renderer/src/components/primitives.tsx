@@ -47,7 +47,11 @@ export function Button({
 			disabled={disabled || busy}
 			title={title}
 		>
-			{busy ? <span className="spinner" /> : icon !== undefined ? <Icon name={icon} size={16} /> : null}
+			{busy ? (
+				<span className="spinner" />
+			) : icon !== undefined ? (
+				<Icon name={icon} size={16} />
+			) : null}
 			{children}
 		</button>
 	)
@@ -424,7 +428,13 @@ export function Modal({
 						<h2>{title}</h2>
 						{subtitle === undefined ? null : <small>{subtitle}</small>}
 					</div>
-					<Button icon="close" variant="ghost" size="small" onClick={onClose} title="Close" />
+					<Button
+						icon="close"
+						variant="ghost"
+						size="small"
+						onClick={onClose}
+						title="Close"
+					/>
 				</div>
 				{children}
 				{footer === undefined ? null : <div className="modal-footer">{footer}</div>}

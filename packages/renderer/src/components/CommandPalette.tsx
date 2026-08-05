@@ -87,7 +87,9 @@ export function CommandPalette({
 				/>
 				<div className="palette-list">
 					{matches.length === 0 ? (
-						<div style={{ padding: 16, color: "var(--muted)" }}>Nothing matched that search.</div>
+						<div style={{ padding: 16, color: "var(--muted)" }}>
+							Nothing matched that search.
+						</div>
 					) : (
 						matches.map((command, position) => (
 							<button

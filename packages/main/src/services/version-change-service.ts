@@ -80,10 +80,7 @@ export class VersionChangeService {
 		}
 	}
 
-	async change(
-		instanceId: string,
-		request: VersionChangeRequestDto,
-	): Promise<InstanceSummary> {
+	async change(instanceId: string, request: VersionChangeRequestDto): Promise<InstanceSummary> {
 		const config = await this.instances.config(instanceId)
 		const assessment = await this.assess(instanceId, request)
 		const shouldBackup = request.createBackup ?? assessment.recommendBackup

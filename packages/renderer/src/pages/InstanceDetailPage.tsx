@@ -67,13 +67,7 @@ const CONTENT_LABELS: Record<ContentKind, string> = {
 	datapack: "Datapacks",
 }
 
-function ContentTab({
-	instanceId,
-	kind,
-}: {
-	instanceId: string
-	kind: ContentKind
-}): JSX.Element {
+function ContentTab({ instanceId, kind }: { instanceId: string; kind: ContentKind }): JSX.Element {
 	const entries = useAsync<readonly ContentEntry[]>(
 		() => invoke("content:list", instanceId, kind),
 		[instanceId, kind],
@@ -128,7 +122,11 @@ function ContentTab({
 	return (
 		<div className="col" style={{ gap: 16 }}>
 			<div className="row wrap">
-				<SearchInput value={search} onChange={setSearch} placeholder={`Search ${CONTENT_LABELS[kind].toLowerCase()}`} />
+				<SearchInput
+					value={search}
+					onChange={setSearch}
+					placeholder={`Search ${CONTENT_LABELS[kind].toLowerCase()}`}
+				/>
 				<Select
 					value={sort}
 					onChange={setSort}
@@ -211,7 +209,9 @@ function ContentTab({
 							icon="check"
 							busy={busy}
 							onClick={() => {
-								void run(() => invoke("content:setEnabled", instanceId, kind, selected, true))
+								void run(() =>
+									invoke("content:setEnabled", instanceId, kind, selected, true),
+								)
 							}}
 						>
 							Enable
@@ -221,7 +221,9 @@ function ContentTab({
 							icon="pause"
 							busy={busy}
 							onClick={() => {
-								void run(() => invoke("content:setEnabled", instanceId, kind, selected, false))
+								void run(() =>
+									invoke("content:setEnabled", instanceId, kind, selected, false),
+								)
 							}}
 						>
 							Disable
@@ -271,7 +273,9 @@ function ContentTab({
 						<div className="col" style={{ marginTop: 10 }}>
 							{analysis.issues.map((issue, index) => (
 								<div className="row" key={`${issue.kind}-${index}`}>
-									<Badge tone={issue.kind === "duplicate" ? "warning" : "danger"}>{issue.kind}</Badge>
+									<Badge tone={issue.kind === "duplicate" ? "warning" : "danger"}>
+										{issue.kind}
+									</Badge>
 									<small>{issue.message}</small>
 								</div>
 							))}
@@ -302,7 +306,9 @@ function ContentTab({
 					{visible.map((entry) => (
 						<div
 							key={entry.fileName}
-							className={selected.includes(entry.fileName) ? "list-row selected" : "list-row"}
+							className={
+								selected.includes(entry.fileName) ? "list-row selected" : "list-row"
+							}
 						>
 							<input
 								type="checkbox"
@@ -322,11 +328,21 @@ function ContentTab({
 									<strong>{entry.displayName}</strong>
 									{entry.version === null ? null : <Badge>{entry.version}</Badge>}
 									{entry.updateAvailable ? (
-										<Badge tone="accent">{entry.latestVersionName ?? "update"}</Badge>
+										<Badge tone="accent">
+											{entry.latestVersionName ?? "update"}
+										</Badge>
 									) : null}
 								</div>
-								<small style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-									{entry.author === null ? entry.fileName : `${entry.author} · ${entry.fileName}`}
+								<small
+									style={{
+										overflow: "hidden",
+										textOverflow: "ellipsis",
+										whiteSpace: "nowrap",
+									}}
+								>
+									{entry.author === null
+										? entry.fileName
+										: `${entry.author} · ${entry.fileName}`}
 								</small>
 							</div>
 							<small>{formatBytes(entry.sizeBytes)}</small>
@@ -334,7 +350,13 @@ function ContentTab({
 								checked={entry.enabled}
 								onChange={(value) => {
 									void run(() =>
-										invoke("content:setEnabled", instanceId, kind, [entry.fileName], value),
+										invoke(
+											"content:setEnabled",
+											instanceId,
+											kind,
+											[entry.fileName],
+											value,
+										),
 									)
 								}}
 							/>
@@ -344,7 +366,11 @@ function ContentTab({
 								icon="trash"
 								title="Delete"
 								onClick={() => {
-									void run(() => invoke("content:delete", instanceId, kind, [entry.fileName]))
+									void run(() =>
+										invoke("content:delete", instanceId, kind, [
+											entry.fileName,
+										]),
+									)
 								}}
 							/>
 						</div>
@@ -375,7 +401,9 @@ function VersionChangeModal({
 	)
 	const loaderVersions = useAsync<readonly LoaderVersion[]>(
 		() =>
-			loader === "vanilla" ? Promise.resolve([]) : invoke("loaders:list", loader, gameVersion),
+			loader === "vanilla"
+				? Promise.resolve([])
+				: invoke("loaders:list", loader, gameVersion),
 		[loader, gameVersion],
 	)
 	const assessment = useAsync<VersionChangeAssessmentDto>(
@@ -392,10 +420,11 @@ function VersionChangeModal({
 	const filtered = useMemo(() => {
 		const needle = search.trim().toLowerCase()
 		const entries = versions.data ?? []
-		return (needle === "" ? entries : entries.filter((entry) => entry.id.toLowerCase().includes(needle))).slice(
-			0,
-			60,
-		)
+		return (
+			needle === ""
+				? entries
+				: entries.filter((entry) => entry.id.toLowerCase().includes(needle))
+		).slice(0, 60)
 	}, [versions.data, search])
 
 	const apply = async (): Promise<void> => {
@@ -413,7 +442,9 @@ function VersionChangeModal({
 		}
 	}
 
-	const blocked = (assessment.data?.warnings ?? []).some((warning) => warning.severity === "blocker")
+	const blocked = (assessment.data?.warnings ?? []).some(
+		(warning) => warning.severity === "blocker",
+	)
 
 	return (
 		<Modal
@@ -460,7 +491,9 @@ function VersionChangeModal({
 								{ value: "", label: "Recommended" },
 								...(loaderVersions.data ?? []).map((version) => ({
 									value: version.id,
-									label: version.recommended ? `${version.id} (recommended)` : version.id,
+									label: version.recommended
+										? `${version.id} (recommended)`
+										: version.id,
 								})),
 							]}
 						/>
@@ -470,13 +503,19 @@ function VersionChangeModal({
 
 			<Field label="Target Minecraft version">
 				<div className="col">
-					<SearchInput value={search} onChange={setSearch} placeholder="Search versions" />
+					<SearchInput
+						value={search}
+						onChange={setSearch}
+						placeholder="Search versions"
+					/>
 					<div className="list" style={{ maxHeight: 200, overflowY: "auto" }}>
 						{filtered.map((entry) => (
 							<button
 								key={entry.id}
 								type="button"
-								className={entry.id === gameVersion ? "list-row selected" : "list-row"}
+								className={
+									entry.id === gameVersion ? "list-row selected" : "list-row"
+								}
 								style={{ border: "none", cursor: "pointer", textAlign: "left" }}
 								onClick={() => {
 									setGameVersion(entry.id)
@@ -492,7 +531,11 @@ function VersionChangeModal({
 				</div>
 			</Field>
 
-			<Toggle checked={createBackup} onChange={setCreateBackup} label="Create a backup before changing" />
+			<Toggle
+				checked={createBackup}
+				onChange={setCreateBackup}
+				label="Create a backup before changing"
+			/>
 
 			<Card flat>
 				{assessment.data === undefined ? (
@@ -501,14 +544,22 @@ function VersionChangeModal({
 					<div className="col">
 						<div className="row wrap">
 							<Badge tone="accent">{assessment.data.direction}</Badge>
-							{assessment.data.recommendBackup ? <Badge tone="warning">backup advised</Badge> : null}
-							{assessment.data.javaChanges ? <Badge tone="warning">java changes</Badge> : null}
+							{assessment.data.recommendBackup ? (
+								<Badge tone="warning">backup advised</Badge>
+							) : null}
+							{assessment.data.javaChanges ? (
+								<Badge tone="warning">java changes</Badge>
+							) : null}
 						</div>
 						{assessment.data.warnings.length === 0 ? (
 							<small>No problems detected for this change.</small>
 						) : (
 							assessment.data.warnings.map((warning) => (
-								<div className="row" key={warning.code} style={{ alignItems: "flex-start" }}>
+								<div
+									className="row"
+									key={warning.code}
+									style={{ alignItems: "flex-start" }}
+								>
 									<Badge
 										tone={
 											warning.severity === "blocker"
@@ -522,13 +573,17 @@ function VersionChangeModal({
 									</Badge>
 									<div className="col" style={{ gap: 1 }}>
 										<span>{warning.message}</span>
-										{warning.detail === null ? null : <small>{warning.detail}</small>}
+										{warning.detail === null ? null : (
+											<small>{warning.detail}</small>
+										)}
 									</div>
 								</div>
 							))
 						)}
 						{assessment.data.incompatibleMods.length === 0 ? null : (
-							<small>Incompatible mods: {assessment.data.incompatibleMods.join(", ")}</small>
+							<small>
+								Incompatible mods: {assessment.data.incompatibleMods.join(", ")}
+							</small>
 						)}
 					</div>
 				)}
@@ -561,7 +616,11 @@ function BackupsTab({ instanceId }: { instanceId: string }): JSX.Element {
 		<div className="col" style={{ gap: 16 }}>
 			<Card flat>
 				<div className="row wrap">
-					<TextInput value={note} onChange={setNote} placeholder="Optional note, e.g. before 1.21 upgrade" />
+					<TextInput
+						value={note}
+						onChange={setNote}
+						placeholder="Optional note, e.g. before 1.21 upgrade"
+					/>
 					<Button
 						variant="primary"
 						icon="plus"
@@ -587,10 +646,12 @@ function BackupsTab({ instanceId }: { instanceId: string }): JSX.Element {
 						<div className="list-row" key={backup.id}>
 							<Icon name="shield" size={17} />
 							<div className="col" style={{ gap: 2, flex: 1 }}>
-								<strong>{backup.note === "" ? backup.fileName : backup.note}</strong>
+								<strong>
+									{backup.note === "" ? backup.fileName : backup.note}
+								</strong>
 								<small>
-									{formatDate(backup.createdAt)} · {backup.gameVersion} · {backup.loader} ·{" "}
-									{formatBytes(backup.sizeBytes)}
+									{formatDate(backup.createdAt)} · {backup.gameVersion} ·{" "}
+									{backup.loader} · {formatBytes(backup.sizeBytes)}
 								</small>
 							</div>
 							<Button
@@ -608,7 +669,11 @@ function BackupsTab({ instanceId }: { instanceId: string }): JSX.Element {
 								icon="trash"
 								title="Delete backup"
 								onClick={() => {
-									void invoke("instances:deleteBackup", instanceId, backup.id).then(backups.reload)
+									void invoke(
+										"instances:deleteBackup",
+										instanceId,
+										backup.id,
+									).then(backups.reload)
 								}}
 							/>
 						</div>
@@ -627,7 +692,9 @@ function BackupsTab({ instanceId }: { instanceId: string }): JSX.Element {
 					onConfirm={() => {
 						const target = restoring
 						setRestoring(null)
-						void invoke("instances:restoreBackup", instanceId, target.id).then(backups.reload)
+						void invoke("instances:restoreBackup", instanceId, target.id).then(
+							backups.reload,
+						)
 					}}
 				/>
 			)}
@@ -674,7 +741,10 @@ function LogsTab({ instanceId }: { instanceId: string }): JSX.Element {
 					icon="copy"
 					onClick={() => {
 						const text = (bundle.data?.lines ?? [])
-							.map((line) => `${line.timestamp} [${line.level}] ${line.scope} ${line.message}`)
+							.map(
+								(line) =>
+									`${line.timestamp} [${line.level}] ${line.scope} ${line.message}`,
+							)
 							.join("\n")
 						void navigator.clipboard.writeText(text)
 					}}
@@ -701,15 +771,28 @@ function LogsTab({ instanceId }: { instanceId: string }): JSX.Element {
 						<Card key={diagnosis.id} flat>
 							<div className="row between">
 								<div className="row">
-									<Badge tone={diagnosis.severity === "warning" ? "warning" : "danger"}>
+									<Badge
+										tone={
+											diagnosis.severity === "warning" ? "warning" : "danger"
+										}
+									>
 										{diagnosis.severity}
 									</Badge>
 									<strong>{diagnosis.title}</strong>
 								</div>
 								<small>{Math.round(diagnosis.confidence * 100)}% confidence</small>
 							</div>
-							<small style={{ display: "block", marginTop: 8 }}>{diagnosis.explanation}</small>
-							<ul style={{ marginTop: 8, paddingLeft: 18, color: "var(--muted)", fontSize: "0.82rem" }}>
+							<small style={{ display: "block", marginTop: 8 }}>
+								{diagnosis.explanation}
+							</small>
+							<ul
+								style={{
+									marginTop: 8,
+									paddingLeft: 18,
+									color: "var(--muted)",
+									fontSize: "0.82rem",
+								}}
+							>
 								{diagnosis.remedies.map((remedy) => (
 									<li key={remedy}>{remedy}</li>
 								))}
@@ -736,7 +819,10 @@ function LogsTab({ instanceId }: { instanceId: string }): JSX.Element {
 					<small>No log output yet. Launch the instance to see live output here.</small>
 				) : (
 					(bundle.data?.lines ?? []).map((line, index) => (
-						<div className={`log-line ${line.level}`} key={`${line.timestamp}-${index}`}>
+						<div
+							className={`log-line ${line.level}`}
+							key={`${line.timestamp}-${index}`}
+						>
 							<span className="time">{line.timestamp.slice(11, 19)}</span>
 							<span className="lvl">{line.level}</span>
 							<span className="msg">{line.message}</span>
@@ -847,7 +933,10 @@ function SettingsTab({
 			<Card>
 				<h3>Java and memory</h3>
 				<div className="col" style={{ marginTop: 12 }}>
-					<Field label="Java runtime" hint={`This version needs Java ${instance.requiredJavaMajor} or newer`}>
+					<Field
+						label="Java runtime"
+						hint={`This version needs Java ${instance.requiredJavaMajor} or newer`}
+					>
 						<Select
 							value={instance.javaPath ?? ""}
 							onChange={(value) => {
@@ -996,7 +1085,11 @@ export function InstanceDetailPage({
 		if (payload.instanceId !== instanceId) {
 			return
 		}
-		if (payload.state === "running" || payload.state === "exited" || payload.state === "error") {
+		if (
+			payload.state === "running" ||
+			payload.state === "exited" ||
+			payload.state === "error"
+		) {
 			setProgressLabel(null)
 			instance.reload()
 			return
@@ -1010,7 +1103,10 @@ export function InstanceDetailPage({
 		[instanceId, tab],
 	)
 	const screenshots = useAsync<readonly ScreenshotEntry[]>(
-		() => (tab === "screenshots" ? invoke("instances:screenshots", instanceId) : Promise.resolve([])),
+		() =>
+			tab === "screenshots"
+				? invoke("instances:screenshots", instanceId)
+				: Promise.resolve([]),
 		[instanceId, tab],
 	)
 
@@ -1050,7 +1146,10 @@ export function InstanceDetailPage({
 						fontSize: "1.2rem",
 						...(current.background === null
 							? {}
-							: { backgroundImage: `url("file://${current.background}")`, backgroundSize: "cover" }),
+							: {
+									backgroundImage: `url("file://${current.background}")`,
+									backgroundSize: "cover",
+								}),
 					}}
 				>
 					{current.background === null ? (current.icon ?? "◆") : null}
@@ -1178,8 +1277,9 @@ export function InstanceDetailPage({
 							</div>
 							{report === null ? null : (
 								<small>
-									Checked {report.checked} files, repaired {report.repaired}, missing{" "}
-									{report.missing}, corrupt {report.corrupt} in {Math.round(report.durationMs / 100) / 10}s
+									Checked {report.checked} files, repaired {report.repaired},
+									missing {report.missing}, corrupt {report.corrupt} in{" "}
+									{Math.round(report.durationMs / 100) / 10}s
 								</small>
 							)}
 						</div>
@@ -1211,13 +1311,21 @@ export function InstanceDetailPage({
 			) : null}
 
 			{tab === "mods" ? <ContentTab instanceId={current.id} kind="mod" /> : null}
-			{tab === "resourcepacks" ? <ContentTab instanceId={current.id} kind="resourcepack" /> : null}
-			{tab === "shaderpacks" ? <ContentTab instanceId={current.id} kind="shaderpack" /> : null}
+			{tab === "resourcepacks" ? (
+				<ContentTab instanceId={current.id} kind="resourcepack" />
+			) : null}
+			{tab === "shaderpacks" ? (
+				<ContentTab instanceId={current.id} kind="shaderpack" />
+			) : null}
 			{tab === "datapacks" ? <ContentTab instanceId={current.id} kind="datapack" /> : null}
 
 			{tab === "worlds" ? (
 				(worlds.data ?? []).length === 0 ? (
-					<EmptyState icon="cube" title="No worlds yet" description="Create a world in game and it appears here." />
+					<EmptyState
+						icon="cube"
+						title="No worlds yet"
+						description="Create a world in game and it appears here."
+					/>
 				) : (
 					<div className="list">
 						{(worlds.data ?? []).map((world) => (
@@ -1257,7 +1365,12 @@ export function InstanceDetailPage({
 							<button
 								key={shot.filePath}
 								type="button"
-								style={{ border: "none", background: "none", padding: 0, cursor: "pointer" }}
+								style={{
+									border: "none",
+									background: "none",
+									padding: 0,
+									cursor: "pointer",
+								}}
 								title={`${shot.fileName} · ${formatBytes(shot.sizeBytes)}`}
 								onClick={() => {
 									openPath(shot.filePath)

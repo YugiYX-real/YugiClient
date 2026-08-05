@@ -97,10 +97,7 @@ export function requiredJavaRuntime(
 	}
 }
 
-export function isJavaCompatible(
-	installedMajor: number,
-	requirement: JavaRequirement,
-): boolean {
+export function isJavaCompatible(installedMajor: number, requirement: JavaRequirement): boolean {
 	if (requirement.major >= 16) {
 		return installedMajor >= requirement.major
 	}

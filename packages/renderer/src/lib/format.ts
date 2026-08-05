@@ -71,14 +71,17 @@ export function formatRelative(iso: string | null): string {
 	}
 
 	const deltaSeconds = Math.round((timestamp - Date.now()) / 1000)
-	const thresholds: readonly { limit: number; unit: Intl.RelativeTimeFormatUnit; divisor: number }[] =
-		[
-			{ limit: 60, unit: "second", divisor: 1 },
-			{ limit: 3600, unit: "minute", divisor: 60 },
-			{ limit: 86_400, unit: "hour", divisor: 3600 },
-			{ limit: 2_592_000, unit: "day", divisor: 86_400 },
-			{ limit: 31_536_000, unit: "month", divisor: 2_592_000 },
-		]
+	const thresholds: readonly {
+		limit: number
+		unit: Intl.RelativeTimeFormatUnit
+		divisor: number
+	}[] = [
+		{ limit: 60, unit: "second", divisor: 1 },
+		{ limit: 3600, unit: "minute", divisor: 60 },
+		{ limit: 86_400, unit: "hour", divisor: 3600 },
+		{ limit: 2_592_000, unit: "day", divisor: 86_400 },
+		{ limit: 31_536_000, unit: "month", divisor: 2_592_000 },
+	]
 
 	const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" })
 	for (const threshold of thresholds) {

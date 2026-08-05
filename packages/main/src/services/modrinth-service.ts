@@ -203,7 +203,9 @@ export class ModrinthService implements ContentResolverPort {
 			limit: String(Math.min(100, query.limit ?? 24)),
 		})
 
-		const raw = await this.http.json<RawSearch>(`${MODRINTH_API}/search?${parameters.toString()}`)
+		const raw = await this.http.json<RawSearch>(
+			`${MODRINTH_API}/search?${parameters.toString()}`,
+		)
 		return {
 			hits: raw.hits.map(toProject),
 			total: raw.total_hits,

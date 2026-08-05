@@ -1,9 +1,9 @@
 {
-	"name": "@halcyon-example/playtime-tracker",
-	"version": "1.0.0",
-	"description": "Example Halcyon plugin that tracks session playtime.",
-	"private": true,
-	"type": "module",
-	"main": "index.mjs",
-	"license": "MIT"
+  "name": "@halcyon-example/playtime-tracker",
+  "version": "1.0.0",
+  "description": "Example Halcyon plugin that tracks session playtime.",
+  "private": true,
+  "type": "module",
+  "main": "index.mjs",
+  "license": "MIT"
 }

@@ -1,13 +1,7 @@
 import { SpeedEstimator, computeEtaSeconds, progressFraction } from "./progress.ts"
 import type { ProgressSnapshot } from "./progress.ts"
 
-export type TaskState =
-	| "queued"
-	| "running"
-	| "completed"
-	| "failed"
-	| "cancelled"
-	| "paused"
+export type TaskState = "queued" | "running" | "completed" | "failed" | "cancelled" | "paused"
 
 export type DownloadTask = {
 	readonly id: string

@@ -16,9 +16,7 @@ import type {
 import type { Container } from "../container.ts"
 import { contentFolder } from "../services/content-service.ts"
 
-type Handler<K extends IpcChannel> = (
-	...args: IpcArgs<K>
-) => IpcResult<K> | Promise<IpcResult<K>>
+type Handler<K extends IpcChannel> = (...args: IpcArgs<K>) => IpcResult<K> | Promise<IpcResult<K>>
 
 type Handlers = { [K in IpcChannel]: Handler<K> }
 
@@ -41,7 +39,11 @@ async function pickFiles(
 	return result.canceled ? [] : result.filePaths
 }
 
-async function pickSavePath(defaultPath: string, name: string, extension: string): Promise<string | null> {
+async function pickSavePath(
+	defaultPath: string,
+	name: string,
+	extension: string,
+): Promise<string | null> {
 	const result = await dialog.showSaveDialog({
 		defaultPath,
 		filters: [{ name, extensions: [extension] }],
@@ -196,7 +198,8 @@ export function registerIpc(container: Container): void {
 			return versions.list({})
 		},
 		"versions:verify": (versionId: string) => versions.verify(versionId, true),
-		"loaders:list": (loader: LoaderId, gameVersion: string) => loaders.list(loader, gameVersion),
+		"loaders:list": (loader: LoaderId, gameVersion: string) =>
+			loaders.list(loader, gameVersion),
 
 		"instances:list": () => instances.list(),
 		"instances:get": async (instanceId: string) => {
@@ -220,7 +223,8 @@ export function registerIpc(container: Container): void {
 		},
 		"instances:duplicate": (instanceId: string, name: string | null) =>
 			instances.duplicate(instanceId, name ?? undefined),
-		"instances:rename": (instanceId: string, name: string) => instances.rename(instanceId, name),
+		"instances:rename": (instanceId: string, name: string) =>
+			instances.rename(instanceId, name),
 		"instances:assessVersionChange": (instanceId: string, request) =>
 			versionChanges.assess(instanceId, request),
 		"instances:changeVersion": (instanceId: string, request) =>
@@ -371,7 +375,8 @@ export function registerIpc(container: Container): void {
 			return skins.list()
 		},
 		"skins:remove": (skinId: string) => skins.remove(skinId),
-		"skins:favorite": (skinId: string, favorite: boolean) => skins.setFavorite(skinId, favorite),
+		"skins:favorite": (skinId: string, favorite: boolean) =>
+			skins.setFavorite(skinId, favorite),
 		"skins:download": async (skinId: string) => {
 			if (skinId === "account") {
 				const account = await auth.selected()

@@ -27,21 +27,21 @@ core  <-  main  ->  ipc  <-  preload  <-  renderer
 Pure functions and small classes with no I/O and no Electron imports, so they run
 under `node --test` in milliseconds.
 
-| Module | Responsibility |
-| --- | --- |
-| `minecraft/types.ts` | Structural types for Mojang version manifests |
-| `minecraft/rules.ts` | Evaluates Mojang rule blocks against an OS/arch/feature environment |
-| `minecraft/maven.ts` | Parses Maven coordinates into paths and URLs |
-| `minecraft/libraries.ts` | Selects libraries and native classifiers for a platform |
-| `minecraft/inheritance.ts` | Merges loader version JSON onto its parent version |
-| `minecraft/version-order.ts` | Compares Minecraft version identifiers, including snapshots |
-| `minecraft/java-requirement.ts` | Maps a version to its required Java major and component |
-| `minecraft/launch-arguments.ts` | Builds JVM and game argument vectors with placeholder substitution |
-| `content/dependency-resolver.ts` | Topologically resolves Modrinth dependency graphs, detects cycles |
-| `diagnostics/crash-analysis.ts` | Recognises eleven crash signatures and produces remedies |
-| `download/queue.ts` | Concurrency-limited queue with retry, backoff, pause and cancellation |
-| `download/progress.ts` | Rolling throughput and ETA estimation |
-| `instances/compatibility.ts` | Version-change assessment, loader migration rules, memory advice |
+| Module                           | Responsibility                                                        |
+| -------------------------------- | --------------------------------------------------------------------- |
+| `minecraft/types.ts`             | Structural types for Mojang version manifests                         |
+| `minecraft/rules.ts`             | Evaluates Mojang rule blocks against an OS/arch/feature environment   |
+| `minecraft/maven.ts`             | Parses Maven coordinates into paths and URLs                          |
+| `minecraft/libraries.ts`         | Selects libraries and native classifiers for a platform               |
+| `minecraft/inheritance.ts`       | Merges loader version JSON onto its parent version                    |
+| `minecraft/version-order.ts`     | Compares Minecraft version identifiers, including snapshots           |
+| `minecraft/java-requirement.ts`  | Maps a version to its required Java major and component               |
+| `minecraft/launch-arguments.ts`  | Builds JVM and game argument vectors with placeholder substitution    |
+| `content/dependency-resolver.ts` | Topologically resolves Modrinth dependency graphs, detects cycles     |
+| `diagnostics/crash-analysis.ts`  | Recognises eleven crash signatures and produces remedies              |
+| `download/queue.ts`              | Concurrency-limited queue with retry, backoff, pause and cancellation |
+| `download/progress.ts`           | Rolling throughput and ETA estimation                                 |
+| `instances/compatibility.ts`     | Version-change assessment, loader migration rules, memory advice      |
 
 Every module has a sibling `*.test.ts`. The suite currently holds **104 assertions
 across 12 files** and needs no dependencies: `node scripts/run-tests.mjs`.
@@ -79,15 +79,15 @@ Unknown channels throw before crossing the boundary.
 
 ### Infrastructure (`src/infra`)
 
-| File | Responsibility |
-| --- | --- |
-| `paths.ts` | Every directory Halcyon owns, derived once from `app.getPath` |
-| `logger.ts` | Levelled file and console logger |
-| `events.ts` | Typed event bus that fans out to windows and plugins |
-| `json-store.ts` | Atomic read/update/write JSON persistence with defaults |
-| `http.ts` | Fetch wrapper: retries on 408/425/429/5xx, exponential backoff, conditional requests, hash verification |
-| `fs-extra.ts` | `pathExists`, recursive copy, safe remove, directory size |
-| `platform.ts` | OS and architecture normalisation for Mojang rule evaluation |
+| File            | Responsibility                                                                                          |
+| --------------- | ------------------------------------------------------------------------------------------------------- |
+| `paths.ts`      | Every directory Halcyon owns, derived once from `app.getPath`                                           |
+| `logger.ts`     | Levelled file and console logger                                                                        |
+| `events.ts`     | Typed event bus that fans out to windows and plugins                                                    |
+| `json-store.ts` | Atomic read/update/write JSON persistence with defaults                                                 |
+| `http.ts`       | Fetch wrapper: retries on 408/425/429/5xx, exponential backoff, conditional requests, hash verification |
+| `fs-extra.ts`   | `pathExists`, recursive copy, safe remove, directory size                                               |
+| `platform.ts`   | OS and architecture normalisation for Mojang rule evaluation                                            |
 
 ### Services (`src/services`)
 
@@ -173,11 +173,11 @@ importing validates the manifest before adopting it.
 
 ## Testing strategy
 
-| Layer | How it is tested |
-| --- | --- |
-| `core` | Unit tests over pure functions, including regression cases for crash signatures, version ordering and memory recommendations |
+| Layer       | How it is tested                                                                                                                                        |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `core`      | Unit tests over pure functions, including regression cases for crash signatures, version ordering and memory recommendations                            |
 | Integration | Queue behaviour under failure and cancellation, dependency resolution over real Modrinth response shapes, inheritance merging over real loader profiles |
-| Contract | `CONTRACT_IS_FULLY_ENUMERATED` and the exhaustive `Handlers` map make channel drift a compile error |
-| Static | `tsc --noEmit` across every package, ESLint with type-aware rules, Prettier `--check` |
+| Contract    | `CONTRACT_IS_FULLY_ENUMERATED` and the exhaustive `Handlers` map make channel drift a compile error                                                     |
+| Static      | `tsc --noEmit` across every package, ESLint with type-aware rules, Prettier `--check`                                                                   |
 
 CI runs all of it on Ubuntu, Windows and macOS.

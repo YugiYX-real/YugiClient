@@ -25,8 +25,7 @@ export function parseReleaseVersion(id: string): ParsedRelease | undefined {
 	}
 
 	const rawStage = match[4]?.toLowerCase()
-	const stage: ReleaseStage =
-		rawStage === undefined ? "final" : rawStage === "rc" ? "rc" : "pre"
+	const stage: ReleaseStage = rawStage === undefined ? "final" : rawStage === "rc" ? "rc" : "pre"
 
 	return {
 		major: Number(match[1]),

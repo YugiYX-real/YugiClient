@@ -38,7 +38,12 @@ html {
 
 body {
 	font-family:
-		"Inter", "Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui,
+		"Inter",
+		"Segoe UI Variable Text",
+		"Segoe UI",
+		-apple-system,
+		BlinkMacSystemFont,
+		system-ui,
 		sans-serif;
 	background-color: var(--surface-0);
 	color: var(--text);
@@ -66,8 +71,8 @@ body::after {
 	position: fixed;
 	inset: -30%;
 	background:
-		radial-gradient(closest-side, rgba(var(--accent-rgb), 0.18), transparent 72%) 8% 0% / 52% 52%
-			no-repeat,
+		radial-gradient(closest-side, rgba(var(--accent-rgb), 0.18), transparent 72%) 8% 0% / 52%
+			52% no-repeat,
 		radial-gradient(closest-side, rgba(57, 224, 200, 0.12), transparent 72%) 92% 88% / 48% 48%
 			no-repeat;
 	pointer-events: none;
@@ -275,7 +280,10 @@ textarea {
 	color: var(--muted);
 	cursor: pointer;
 	text-align: left;
-	transition: background 160ms ease, color 160ms ease, transform 160ms ease;
+	transition:
+		background 160ms ease,
+		color 160ms ease,
+		transform 160ms ease;
 }
 
 .nav-item:hover {
@@ -386,7 +394,10 @@ textarea {
 	border-radius: var(--radius);
 	padding: 18px;
 	backdrop-filter: blur(14px);
-	transition: transform 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
+	transition:
+		transform 200ms ease,
+		border-color 200ms ease,
+		box-shadow 200ms ease;
 }
 
 .card.interactive {
@@ -457,7 +468,10 @@ textarea {
 	cursor: pointer;
 	font-weight: 540;
 	font-size: 0.88rem;
-	transition: transform 140ms ease, background 160ms ease, border-color 160ms ease;
+	transition:
+		transform 140ms ease,
+		background 160ms ease,
+		border-color 160ms ease;
 	white-space: nowrap;
 }
 
@@ -568,7 +582,9 @@ textarea {
 	border-radius: var(--radius-sm);
 	padding: 9px 12px;
 	outline: none;
-	transition: border-color 160ms ease, box-shadow 160ms ease;
+	transition:
+		border-color 160ms ease,
+		box-shadow 160ms ease;
 	width: 100%;
 }
 
@@ -695,7 +711,9 @@ input[type="color"] {
 	cursor: pointer;
 	font-size: 0.84rem;
 	white-space: nowrap;
-	transition: background 160ms ease, color 160ms ease;
+	transition:
+		background 160ms ease,
+		color 160ms ease;
 }
 
 .tab[aria-selected="true"] {
@@ -758,8 +776,7 @@ input[type="color"] {
 	width: 108px;
 	height: 108px;
 	border-radius: 30px;
-	background:
-		radial-gradient(closest-side, rgba(var(--accent-rgb), 0.3), transparent 72%),
+	background: radial-gradient(closest-side, rgba(var(--accent-rgb), 0.3), transparent 72%),
 		linear-gradient(150deg, rgba(26, 33, 48, 0.9), rgba(18, 23, 34, 0.6));
 	border: 1px solid var(--border);
 	display: grid;
@@ -954,7 +971,9 @@ input[type="color"] {
 	padding: 22px;
 	text-align: center;
 	color: var(--muted);
-	transition: border-color 160ms ease, background 160ms ease;
+	transition:
+		border-color 160ms ease,
+		background 160ms ease;
 }
 
 .dropzone[data-active="true"] {
@@ -1055,8 +1074,8 @@ input[type="color"] {
 
 .mod-art {
 	width: 44px;
-	height: 44px
-;	border-radius: var(--radius-sm);
+	height: 44px;
+	border-radius: var(--radius-sm);
 	object-fit: cover;
 	background: var(--surface-3);
 	flex: none;

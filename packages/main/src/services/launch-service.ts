@@ -140,7 +140,12 @@ export class LaunchService {
 			throw new Error("The Microsoft session expired; sign in again")
 		}
 
-		this.progress(instanceId, "resolving", `Resolving ${config.loader} ${config.gameVersion}`, 0.08)
+		this.progress(
+			instanceId,
+			"resolving",
+			`Resolving ${config.loader} ${config.gameVersion}`,
+			0.08,
+		)
 		const launchVersionId = await this.loaders.install(
 			config.loader,
 			config.gameVersion,
@@ -160,7 +165,11 @@ export class LaunchService {
 
 		this.progress(instanceId, "installing", "Extracting native libraries", 0.66)
 		const gameDirectory = this.instances.gameDirectory(instanceId)
-		const nativesDirectory = join(this.instances.directory(instanceId), "natives", launchVersionId)
+		const nativesDirectory = join(
+			this.instances.directory(instanceId),
+			"natives",
+			launchVersionId,
+		)
 		await mkdir(gameDirectory, { recursive: true })
 		await this.versions.extractNatives(version, nativesDirectory)
 		const legacyAssetsDir = await this.versions.materialiseLegacyAssets(version, gameDirectory)
@@ -208,7 +217,9 @@ export class LaunchService {
 				fullscreen: config.window.fullscreen,
 			},
 			log4jConfigPath:
-				loggingId === undefined ? undefined : join(this.paths.assets, "log_configs", loggingId),
+				loggingId === undefined
+					? undefined
+					: join(this.paths.assets, "log_configs", loggingId),
 		})
 
 		this.progress(instanceId, "launching", `Starting Minecraft ${config.gameVersion}`, 0.9)

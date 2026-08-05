@@ -161,7 +161,9 @@ export class AuthService {
 		}
 
 		const { accounts } = await this.store.read()
-		if (accounts.some((account) => account.kind === "offline" && account.username === trimmed)) {
+		if (
+			accounts.some((account) => account.kind === "offline" && account.username === trimmed)
+		) {
 			throw new Error(`An offline account named ${trimmed} already exists`)
 		}
 
@@ -389,7 +391,8 @@ export class AuthService {
 			accounts.map((account) => ({
 				...account,
 				selected: account.id === accountId,
-				lastUsedAt: account.id === accountId ? new Date().toISOString() : account.lastUsedAt,
+				lastUsedAt:
+					account.id === accountId ? new Date().toISOString() : account.lastUsedAt,
 			})),
 		)
 	}
@@ -397,7 +400,9 @@ export class AuthService {
 	async update(accountId: string, patch: AccountPatch): Promise<readonly Account[]> {
 		const { accounts } = await this.store.read()
 		return this.persist(
-			accounts.map((account) => (account.id === accountId ? { ...account, ...patch } : account)),
+			accounts.map((account) =>
+				account.id === accountId ? { ...account, ...patch } : account,
+			),
 		)
 	}
 
@@ -446,7 +451,10 @@ export class AuthService {
 
 		for (const entry of parsed) {
 			const username = entry.username
-			if (username === undefined || accounts.some((account) => account.username === username)) {
+			if (
+				username === undefined ||
+				accounts.some((account) => account.username === username)
+			) {
 				continue
 			}
 			const uuid = entry.uuid ?? offlineUuid(username)

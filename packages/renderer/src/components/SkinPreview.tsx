@@ -36,7 +36,14 @@ function Box({
 	width: number
 	height: number
 	depth: number
-	faces: { front: FaceRect; back: FaceRect; left: FaceRect; right: FaceRect; top: FaceRect; bottom: FaceRect }
+	faces: {
+		front: FaceRect
+		back: FaceRect
+		left: FaceRect
+		right: FaceRect
+		top: FaceRect
+		bottom: FaceRect
+	}
 	style: CSSProperties
 }): JSX.Element {
 	const halfDepth = (depth * SCALE) / 2
@@ -54,25 +61,41 @@ function Box({
 			<div style={face(dataUrl, faces.back, `rotateY(180deg) translateZ(${halfDepth}px)`)} />
 			<div
 				style={{
-					...face(dataUrl, faces.right, `rotateY(90deg) translateZ(${(width * SCALE) / 2}px)`),
+					...face(
+						dataUrl,
+						faces.right,
+						`rotateY(90deg) translateZ(${(width * SCALE) / 2}px)`,
+					),
 					left: (width * SCALE) / 2 - halfDepth,
 				}}
 			/>
 			<div
 				style={{
-					...face(dataUrl, faces.left, `rotateY(-90deg) translateZ(${(width * SCALE) / 2}px)`),
+					...face(
+						dataUrl,
+						faces.left,
+						`rotateY(-90deg) translateZ(${(width * SCALE) / 2}px)`,
+					),
 					left: (width * SCALE) / 2 - halfDepth,
 				}}
 			/>
 			<div
 				style={{
-					...face(dataUrl, faces.top, `rotateX(90deg) translateZ(${(height * SCALE) / 2}px)`),
+					...face(
+						dataUrl,
+						faces.top,
+						`rotateX(90deg) translateZ(${(height * SCALE) / 2}px)`,
+					),
 					top: (height * SCALE) / 2 - halfDepth,
 				}}
 			/>
 			<div
 				style={{
-					...face(dataUrl, faces.bottom, `rotateX(-90deg) translateZ(${(height * SCALE) / 2}px)`),
+					...face(
+						dataUrl,
+						faces.bottom,
+						`rotateX(-90deg) translateZ(${(height * SCALE) / 2}px)`,
+					),
 					top: (height * SCALE) / 2 - halfDepth,
 				}}
 			/>

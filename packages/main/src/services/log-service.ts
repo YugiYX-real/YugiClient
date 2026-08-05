@@ -67,7 +67,9 @@ export function parseLauncherLine(raw: string): LogLine {
 		const timestamp = match[1] ?? ""
 		const parsed = Date.parse(timestamp)
 		return {
-			timestamp: Number.isNaN(parsed) ? new Date().toISOString() : new Date(parsed).toISOString(),
+			timestamp: Number.isNaN(parsed)
+				? new Date().toISOString()
+				: new Date(parsed).toISOString(),
 			level: toLevel(match[2] ?? "INFO"),
 			scope: match[3] ?? "launcher",
 			message: match[4] ?? "",
@@ -200,7 +202,10 @@ export class LogService {
 		const stamp = new Date().toISOString().replace(/[:.]/g, "-")
 		const target = join(this.paths.logs, `halcyon-${query.source}-${stamp}.log`)
 		const body = bundle.lines
-			.map((line) => `[${line.timestamp}] ${line.level.toUpperCase()} ${line.scope}: ${line.message}`)
+			.map(
+				(line) =>
+					`[${line.timestamp}] ${line.level.toUpperCase()} ${line.scope}: ${line.message}`,
+			)
 			.join("\n")
 
 		await mkdir(this.paths.logs, { recursive: true })

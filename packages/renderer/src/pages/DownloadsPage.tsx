@@ -92,7 +92,8 @@ export function DownloadsPage(): JSX.Element {
 					<ProgressBar fraction={snapshot.fraction} />
 					<div className="row between">
 						<small>
-							{formatBytes(snapshot.completedBytes)} of {formatBytes(snapshot.totalBytes)}
+							{formatBytes(snapshot.completedBytes)} of{" "}
+							{formatBytes(snapshot.totalBytes)}
 						</small>
 						<small>{Math.round(snapshot.fraction * 100)}%</small>
 					</div>
@@ -118,7 +119,13 @@ export function DownloadsPage(): JSX.Element {
 						<div className="list-row" key={item.id}>
 							<div className="col" style={{ gap: 4, flex: 1, minWidth: 0 }}>
 								<div className="row" style={{ gap: 8 }}>
-									<strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+									<strong
+										style={{
+											overflow: "hidden",
+											textOverflow: "ellipsis",
+											whiteSpace: "nowrap",
+										}}
+									>
 										{item.label}
 									</strong>
 									<Badge
@@ -132,16 +139,26 @@ export function DownloadsPage(): JSX.Element {
 									>
 										{item.state}
 									</Badge>
-									{item.attempt > 1 ? <Badge tone="warning">attempt {item.attempt}</Badge> : null}
+									{item.attempt > 1 ? (
+										<Badge tone="warning">attempt {item.attempt}</Badge>
+									) : null}
 									<Badge>{item.group}</Badge>
 								</div>
 								<ProgressBar
-									fraction={item.totalBytes > 0 ? item.receivedBytes / item.totalBytes : 0}
-									indeterminate={item.totalBytes === 0 && item.state === "running"}
+									fraction={
+										item.totalBytes > 0
+											? item.receivedBytes / item.totalBytes
+											: 0
+									}
+									indeterminate={
+										item.totalBytes === 0 && item.state === "running"
+									}
 								/>
 								<small>
 									{formatBytes(item.receivedBytes)}
-									{item.totalBytes > 0 ? ` of ${formatBytes(item.totalBytes)}` : ""}
+									{item.totalBytes > 0
+										? ` of ${formatBytes(item.totalBytes)}`
+										: ""}
 									{item.error === null ? "" : ` · ${item.error}`}
 								</small>
 							</div>
@@ -161,11 +178,20 @@ export function DownloadsPage(): JSX.Element {
 
 			{finished.length === 0 ? null : (
 				<Card flat>
-					<SectionHeader title="Recently finished" subtitle={`${finished.length} items`} />
+					<SectionHeader
+						title="Recently finished"
+						subtitle={`${finished.length} items`}
+					/>
 					<div className="col" style={{ marginTop: 10 }}>
 						{finished.slice(-12).map((item) => (
 							<div className="row between" key={item.id}>
-								<small style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+								<small
+									style={{
+										overflow: "hidden",
+										textOverflow: "ellipsis",
+										whiteSpace: "nowrap",
+									}}
+								>
 									{item.label}
 								</small>
 								<small>{formatBytes(item.receivedBytes)}</small>

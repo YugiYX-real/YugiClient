@@ -40,7 +40,9 @@ export function JavaPage(): JSX.Element {
 	}
 
 	const entries = runtimes.data ?? []
-	const installedMajors = new Set(entries.filter((runtime) => runtime.valid).map((runtime) => runtime.major))
+	const installedMajors = new Set(
+		entries.filter((runtime) => runtime.valid).map((runtime) => runtime.major),
+	)
 
 	return (
 		<>
@@ -80,7 +82,9 @@ export function JavaPage(): JSX.Element {
 									<Icon name="java" size={18} />
 									<strong>Java {major}</strong>
 								</div>
-								{installedMajors.has(major) ? <Badge tone="success">ready</Badge> : null}
+								{installedMajors.has(major) ? (
+									<Badge tone="success">ready</Badge>
+								) : null}
 							</div>
 							<small style={{ display: "block", marginTop: 8 }}>
 								{major === 8
@@ -107,7 +111,10 @@ export function JavaPage(): JSX.Element {
 			</Card>
 
 			<Card>
-				<SectionHeader title="Detected runtimes" subtitle={`${entries.length} runtimes on this machine`} />
+				<SectionHeader
+					title="Detected runtimes"
+					subtitle={`${entries.length} runtimes on this machine`}
+				/>
 				{runtimes.loading && runtimes.data === undefined ? (
 					<Skeleton lines={4} />
 				) : entries.length === 0 ? (
@@ -125,10 +132,20 @@ export function JavaPage(): JSX.Element {
 									<div className="row" style={{ gap: 8 }}>
 										<strong>Java {runtime.major}</strong>
 										<Badge>{runtime.version}</Badge>
-										{runtime.managed ? <Badge tone="accent">managed</Badge> : null}
-										{runtime.valid ? null : <Badge tone="danger">unusable</Badge>}
+										{runtime.managed ? (
+											<Badge tone="accent">managed</Badge>
+										) : null}
+										{runtime.valid ? null : (
+											<Badge tone="danger">unusable</Badge>
+										)}
 									</div>
-									<small style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+									<small
+										style={{
+											overflow: "hidden",
+											textOverflow: "ellipsis",
+											whiteSpace: "nowrap",
+										}}
+									>
 										{runtime.vendor} · {runtime.path}
 									</small>
 									{runtime.error === null ? null : <small>{runtime.error}</small>}
@@ -139,7 +156,9 @@ export function JavaPage(): JSX.Element {
 									icon="refresh"
 									title="Revalidate"
 									onClick={() => {
-										void invoke("java:validate", runtime.path).then(runtimes.reload)
+										void invoke("java:validate", runtime.path).then(
+											runtimes.reload,
+										)
 									}}
 								/>
 								<Button

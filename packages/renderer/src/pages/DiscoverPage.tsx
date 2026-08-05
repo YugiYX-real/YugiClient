@@ -56,7 +56,10 @@ function ProjectModal({
 	kind: ContentKind
 	onClose: () => void
 }): JSX.Element {
-	const detail = useAsync<ModrinthProjectDetail>(() => invoke("modrinth:project", projectId), [projectId])
+	const detail = useAsync<ModrinthProjectDetail>(
+		() => invoke("modrinth:project", projectId),
+		[projectId],
+	)
 	const [filterToInstance, setFilterToInstance] = useState(true)
 	const [withDependencies, setWithDependencies] = useState(true)
 	const [busyVersion, setBusyVersion] = useState<string | null>(null)
@@ -78,7 +81,12 @@ function ProjectModal({
 		}
 		setBusyVersion(versionId)
 		try {
-			const result = await invoke("modrinth:install", instance.id, versionId, withDependencies)
+			const result = await invoke(
+				"modrinth:install",
+				instance.id,
+				versionId,
+				withDependencies,
+			)
 			setOutcome(
 				`Installed ${result.installed.length} file(s), skipped ${result.skipped.length}` +
 					(result.problems.length === 0 ? "" : ` · ${result.problems.join(", ")}`),
@@ -132,7 +140,12 @@ function ProjectModal({
 					{detail.data.gallery.length === 0 ? null : (
 						<div className="gallery">
 							{detail.data.gallery.map((image) => (
-								<img key={image.url} src={image.url} alt={image.title ?? ""} title={image.title ?? ""} />
+								<img
+									key={image.url}
+									src={image.url}
+									alt={image.title ?? ""}
+									title={image.title ?? ""}
+								/>
 							))}
 						</div>
 					)}
@@ -161,7 +174,10 @@ function ProjectModal({
 
 					{outcome === null ? null : <Badge tone="success">{outcome}</Badge>}
 
-					<SectionHeader title="Versions" subtitle="Changelogs and dependencies included" />
+					<SectionHeader
+						title="Versions"
+						subtitle="Changelogs and dependencies included"
+					/>
 					{versions.data === undefined ? (
 						<Skeleton lines={4} />
 					) : versions.data.length === 0 ? (
@@ -176,12 +192,19 @@ function ProjectModal({
 								<Card key={version.id} flat>
 									<div className="row wrap">
 										<strong>{version.name}</strong>
-										<Badge tone={version.channel === "release" ? "success" : "warning"}>
+										<Badge
+											tone={
+												version.channel === "release"
+													? "success"
+													: "warning"
+											}
+										>
 											{version.channel}
 										</Badge>
 										<Badge>{version.versionNumber}</Badge>
 										<small>
-											{formatDate(version.datePublished)} · {formatBytes(version.fileSize)} ·{" "}
+											{formatDate(version.datePublished)} ·{" "}
+											{formatBytes(version.fileSize)} ·{" "}
 											{formatCount(version.downloads)} downloads
 										</small>
 										<span className="spacer" />
@@ -208,12 +231,21 @@ function ProjectModal({
 											</Badge>
 										))}
 										{version.dependencies.length === 0 ? null : (
-											<Badge tone="warning">{version.dependencies.length} dependencies</Badge>
+											<Badge tone="warning">
+												{version.dependencies.length} dependencies
+											</Badge>
 										)}
 									</div>
-									{version.changelog === null || version.changelog === "" ? null : (
+									{version.changelog === null ||
+									version.changelog === "" ? null : (
 										<details style={{ marginTop: 8 }}>
-											<summary style={{ cursor: "pointer", color: "var(--muted)", fontSize: "0.82rem" }}>
+											<summary
+												style={{
+													cursor: "pointer",
+													color: "var(--muted)",
+													fontSize: "0.82rem",
+												}}
+											>
 												Changelog
 											</summary>
 											<div className="markdown" style={{ marginTop: 8 }}>
@@ -244,7 +276,10 @@ export function DiscoverPage(): JSX.Element {
 
 	const debouncedQuery = useDebounced(query)
 	const selected = (instances.data ?? []).find((instance) => instance.id === instanceId)
-	const categories = useAsync<readonly string[]>(() => invoke("modrinth:categories", kind), [kind])
+	const categories = useAsync<readonly string[]>(
+		() => invoke("modrinth:categories", kind),
+		[kind],
+	)
 
 	const search = useAsync<ModrinthSearchResult>(() => {
 		const request: ModrinthSearchQuery = {
@@ -257,12 +292,23 @@ export function DiscoverPage(): JSX.Element {
 			...(restrictToInstance && selected !== undefined
 				? {
 						gameVersion: selected.gameVersion,
-						...(kind === "mod" && selected.loader !== "vanilla" ? { loader: selected.loader } : {}),
+						...(kind === "mod" && selected.loader !== "vanilla"
+							? { loader: selected.loader }
+							: {}),
 					}
 				: {}),
 		}
 		return invoke("modrinth:search", request)
-	}, [kind, sort, page, debouncedQuery, category, restrictToInstance, selected?.id, selected?.gameVersion])
+	}, [
+		kind,
+		sort,
+		page,
+		debouncedQuery,
+		category,
+		restrictToInstance,
+		selected?.id,
+		selected?.gameVersion,
+	])
 
 	const hits: readonly ModrinthProject[] = search.data?.hits ?? []
 	const totalPages = useMemo(
@@ -319,7 +365,10 @@ export function DiscoverPage(): JSX.Element {
 							}}
 							options={[
 								{ value: "", label: "All categories" },
-								...(categories.data ?? []).map((name) => ({ value: name, label: name })),
+								...(categories.data ?? []).map((name) => ({
+									value: name,
+									label: name,
+								})),
 							]}
 						/>
 					</Field>
@@ -366,7 +415,11 @@ export function DiscoverPage(): JSX.Element {
 					</Card>
 				</div>
 			) : hits.length === 0 ? (
-				<EmptyState icon="search" title="Nothing matched" description="Try a different term or clear the filters." />
+				<EmptyState
+					icon="search"
+					title="Nothing matched"
+					description="Try a different term or clear the filters."
+				/>
 			) : (
 				<>
 					<div className="grid cols-3">
@@ -385,15 +438,24 @@ export function DiscoverPage(): JSX.Element {
 										<img className="mod-art" src={project.iconUrl} alt="" />
 									)}
 									<div className="col" style={{ gap: 2, minWidth: 0 }}>
-										<strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+										<strong
+											style={{
+												overflow: "hidden",
+												textOverflow: "ellipsis",
+												whiteSpace: "nowrap",
+											}}
+										>
 											{project.title}
 										</strong>
 										<small>
-											{project.author} · {formatCount(project.downloads)} downloads
+											{project.author} · {formatCount(project.downloads)}{" "}
+											downloads
 										</small>
 									</div>
 								</div>
-								<small style={{ display: "block", marginTop: 10 }}>{project.description}</small>
+								<small style={{ display: "block", marginTop: 10 }}>
+									{project.description}
+								</small>
 								<div className="row wrap" style={{ marginTop: 10, gap: 6 }}>
 									{project.categories.slice(0, 3).map((name) => (
 										<Badge key={name}>{name}</Badge>
@@ -414,7 +476,8 @@ export function DiscoverPage(): JSX.Element {
 							Previous
 						</Button>
 						<small>
-							Page {page + 1} of {totalPages} · {formatCount(search.data.total)} results
+							Page {page + 1} of {totalPages} · {formatCount(search.data.total)}{" "}
+							results
 						</small>
 						<Button
 							size="small"

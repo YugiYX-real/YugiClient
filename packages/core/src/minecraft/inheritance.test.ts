@@ -25,10 +25,7 @@ const fabric: VersionJson = {
 	inheritsFrom: "1.20.1",
 	type: "release",
 	mainClass: "net.fabricmc.loader.impl.launch.knot.KnotClient",
-	libraries: [
-		{ name: "net.fabricmc:fabric-loader:0.15.7" },
-		{ name: "org.ow2.asm:asm:9.6" },
-	],
+	libraries: [{ name: "net.fabricmc:fabric-loader:0.15.7" }, { name: "org.ow2.asm:asm:9.6" }],
 	arguments: { jvm: ["-DFabricMcEmu=net.minecraft.client.main.Main"] },
 }
 

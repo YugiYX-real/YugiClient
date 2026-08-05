@@ -140,7 +140,11 @@ export class SkinService {
 		const bytes = await readFile(entry.filePath)
 		const form = new FormData()
 		form.set("variant", entry.model === "slim" ? "slim" : "classic")
-		form.set("file", new Blob([new Uint8Array(bytes)], { type: "image/png" }), basename(entry.filePath))
+		form.set(
+			"file",
+			new Blob([new Uint8Array(bytes)], { type: "image/png" }),
+			basename(entry.filePath),
+		)
 
 		const response = await fetch(SKIN_UPLOAD_URL, {
 			method: "POST",
@@ -171,7 +175,9 @@ export class SkinService {
 
 	async setModel(skinId: string, model: SkinModel): Promise<readonly SkinEntry[]> {
 		await this.store.update((current) => ({
-			entries: current.entries.map((entry) => (entry.id === skinId ? { ...entry, model } : entry)),
+			entries: current.entries.map((entry) =>
+				entry.id === skinId ? { ...entry, model } : entry,
+			),
 		}))
 		return this.list()
 	}

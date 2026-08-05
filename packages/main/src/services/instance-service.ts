@@ -94,7 +94,10 @@ export class InstanceService {
 
 	private async summarise(config: InstanceConfig): Promise<InstanceSummary> {
 		const directory = this.directory(config.id)
-		const mods = await listFiles(this.contentDirectory(config.id, "mods"), [".jar", ".jar.disabled"])
+		const mods = await listFiles(this.contentDirectory(config.id, "mods"), [
+			".jar",
+			".jar.disabled",
+		])
 		return {
 			...config,
 			directory,
@@ -142,13 +145,22 @@ export class InstanceService {
 		}
 
 		await mkdir(this.gameDirectory(id), { recursive: true })
-		for (const folder of ["mods", "resourcepacks", "shaderpacks", "saves", "screenshots", "logs"]) {
+		for (const folder of [
+			"mods",
+			"resourcepacks",
+			"shaderpacks",
+			"saves",
+			"screenshots",
+			"logs",
+		]) {
 			await mkdir(this.contentDirectory(id, folder), { recursive: true })
 		}
 
 		const instances = [...(await this.configs()), config]
 		await this.persist(instances)
-		this.logger.info(`Created instance ${config.name} (${config.gameVersion}, ${config.loader})`)
+		this.logger.info(
+			`Created instance ${config.name} (${config.gameVersion}, ${config.loader})`,
+		)
 		return this.summarise(config)
 	}
 
@@ -221,7 +233,9 @@ export class InstanceService {
 				sizeBytes: await directorySize(folder),
 			})
 		}
-		return worlds.sort((left, right) => (left.lastPlayedAt ?? "") < (right.lastPlayedAt ?? "") ? 1 : -1)
+		return worlds.sort((left, right) =>
+			(left.lastPlayedAt ?? "") < (right.lastPlayedAt ?? "") ? 1 : -1,
+		)
 	}
 
 	async screenshots(instanceId: string): Promise<readonly ScreenshotEntry[]> {
@@ -248,7 +262,10 @@ export class InstanceService {
 		const config = await this.config(instanceId)
 		const archivePath =
 			targetPath ??
-			join(this.paths.exports, `${sanitiseFileName(config.name)}-${config.gameVersion}.halcyon.zip`)
+			join(
+				this.paths.exports,
+				`${sanitiseFileName(config.name)}-${config.gameVersion}.halcyon.zip`,
+			)
 
 		const manifestPath = join(this.directory(instanceId), INSTANCE_MANIFEST)
 		await writeFile(manifestPath, `${JSON.stringify(config, null, "\t")}\n`, "utf8")
@@ -389,13 +406,21 @@ export class InstanceService {
 		await this.persist(
 			instances.map((instance) =>
 				instance.id === instanceId
-					? { ...instance, playtimeMinutes: instance.playtimeMinutes + Math.round(minutes) }
+					? {
+							...instance,
+							playtimeMinutes: instance.playtimeMinutes + Math.round(minutes),
+						}
 					: instance,
 			),
 		)
 	}
 
-	async moveContentFile(instanceId: string, folder: string, from: string, to: string): Promise<void> {
+	async moveContentFile(
+		instanceId: string,
+		folder: string,
+		from: string,
+		to: string,
+	): Promise<void> {
 		const directory = this.contentDirectory(instanceId, folder)
 		await mkdir(directory, { recursive: true })
 		await rename(join(directory, from), join(directory, to))

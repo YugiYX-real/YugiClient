@@ -86,7 +86,9 @@ export function Sidebar({
 								>
 									<Icon name={entry.icon} size={17} />
 									<span>{entry.label}</span>
-									{badge === null ? null : <span className="badge accent">{badge}</span>}
+									{badge === null ? null : (
+										<span className="badge accent">{badge}</span>
+									)}
 								</button>
 							)
 						})}

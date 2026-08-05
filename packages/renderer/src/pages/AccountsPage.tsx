@@ -84,8 +84,9 @@ export function AccountsPage(): JSX.Element {
 			{signingIn ? (
 				<Card flat>
 					<small>
-						A browser window opened for the Microsoft device code flow. Finish signing in there; Halcyon
-						stores only the refresh token, encrypted at rest in your user data folder.
+						A browser window opened for the Microsoft device code flow. Finish signing
+						in there; Halcyon stores only the refresh token, encrypted at rest in your
+						user data folder.
 					</small>
 				</Card>
 			) : null}
@@ -105,22 +106,36 @@ export function AccountsPage(): JSX.Element {
 					{entries.map((account) => (
 						<Card key={account.id} className={account.selected ? "" : "flat"}>
 							<div className="row" style={{ alignItems: "flex-start" }}>
-								<Avatar source={account.avatarUrl} fallback={initialsOf(account.username)} size={44} />
+								<Avatar
+									source={account.avatarUrl}
+									fallback={initialsOf(account.username)}
+									size={44}
+								/>
 								<div className="col" style={{ gap: 2, minWidth: 0, flex: 1 }}>
 									<strong>{account.nickname ?? account.username}</strong>
 									<small>{account.username}</small>
 								</div>
-								{account.favorite ? <Badge tone="accent" icon="star">Favourite</Badge> : null}
+								{account.favorite ? (
+									<Badge tone="accent" icon="star">
+										Favourite
+									</Badge>
+								) : null}
 							</div>
 
 							<div className="row wrap" style={{ marginTop: 12, gap: 6 }}>
-								<Badge tone={account.kind === "microsoft" ? "success" : "neutral"}>{account.kind}</Badge>
+								<Badge tone={account.kind === "microsoft" ? "success" : "neutral"}>
+									{account.kind}
+								</Badge>
 								{account.selected ? <Badge tone="accent">active</Badge> : null}
-								{account.capes.length === 0 ? null : <Badge>{account.capes.length} capes</Badge>}
+								{account.capes.length === 0 ? null : (
+									<Badge>{account.capes.length} capes</Badge>
+								)}
 							</div>
 							<small style={{ display: "block", marginTop: 8 }}>
 								Last used {formatRelative(account.lastUsedAt)}
-								{account.expiresAt === null ? "" : ` · session valid until ${formatRelative(account.expiresAt)}`}
+								{account.expiresAt === null
+									? ""
+									: ` · session valid until ${formatRelative(account.expiresAt)}`}
 							</small>
 
 							<div className="row wrap" style={{ marginTop: 12 }}>
@@ -130,7 +145,9 @@ export function AccountsPage(): JSX.Element {
 										variant="primary"
 										icon="check"
 										onClick={() => {
-											void invoke("accounts:select", account.id).then(accounts.reload)
+											void invoke("accounts:select", account.id).then(
+												accounts.reload,
+											)
 										}}
 									>
 										Use
@@ -141,9 +158,9 @@ export function AccountsPage(): JSX.Element {
 									icon="star"
 									title="Toggle favourite"
 									onClick={() => {
-										void invoke("accounts:update", account.id, { favorite: !account.favorite }).then(
-											accounts.reload,
-										)
+										void invoke("accounts:update", account.id, {
+											favorite: !account.favorite,
+										}).then(accounts.reload)
 									}}
 								/>
 								<Button
@@ -161,7 +178,9 @@ export function AccountsPage(): JSX.Element {
 										icon="refresh"
 										title="Refresh session"
 										onClick={() => {
-											void invoke("accounts:refresh", account.id).then(accounts.reload)
+											void invoke("accounts:refresh", account.id).then(
+												accounts.reload,
+											)
 										}}
 									/>
 								) : null}
@@ -205,7 +224,9 @@ export function AccountsPage(): JSX.Element {
 									const username = offlineName.trim()
 									setOfflineName("")
 									setAddingOffline(false)
-									void invoke("accounts:addOffline", username).then(accounts.reload)
+									void invoke("accounts:addOffline", username).then(
+										accounts.reload,
+									)
 								}}
 							>
 								Add account
@@ -213,8 +234,15 @@ export function AccountsPage(): JSX.Element {
 						</>
 					}
 				>
-					<Field label="Username" hint="3 to 16 characters, letters, numbers and underscores">
-						<TextInput value={offlineName} onChange={setOfflineName} placeholder="Steve" />
+					<Field
+						label="Username"
+						hint="3 to 16 characters, letters, numbers and underscores"
+					>
+						<TextInput
+							value={offlineName}
+							onChange={setOfflineName}
+							placeholder="Steve"
+						/>
 					</Field>
 				</Modal>
 			) : null}

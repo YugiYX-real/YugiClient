@@ -25,7 +25,10 @@ export type ResolutionTarget = {
 
 export type ContentResolverPort = {
 	getVersion(versionId: string): Promise<ContentVersion | undefined>
-	getLatestVersion(projectId: string, target: ResolutionTarget): Promise<ContentVersion | undefined>
+	getLatestVersion(
+		projectId: string,
+		target: ResolutionTarget,
+	): Promise<ContentVersion | undefined>
 }
 
 export type InstalledContent = {

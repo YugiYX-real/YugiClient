@@ -1,38 +1,38 @@
 {
-	"compilerOptions": {
-		"target": "ES2023",
-		"lib": ["ES2023", "DOM", "DOM.Iterable"],
-		"module": "ESNext",
-		"moduleResolution": "bundler",
-		"moduleDetection": "force",
-		"allowImportingTsExtensions": true,
-		"resolveJsonModule": true,
-		"noEmit": true,
-		"jsx": "react-jsx",
-		"strict": true,
-		"noUncheckedIndexedAccess": true,
-		"noImplicitOverride": true,
-		"noFallthroughCasesInSwitch": true,
-		"noPropertyAccessFromIndexSignature": false,
-		"verbatimModuleSyntax": true,
-		"isolatedModules": true,
-		"skipLibCheck": true,
-		"forceConsistentCasingInFileNames": true,
-		"types": ["node"],
-		"baseUrl": ".",
-		"paths": {
-			"@halcyon/core": ["./packages/core/src/index.ts"],
-			"@halcyon/ipc": ["./packages/ipc/src/index.ts"],
-			"@halcyon/plugin-sdk": ["./packages/plugin-sdk/src/index.ts"],
-			"@renderer/*": ["./packages/renderer/src/*"]
-		}
-	},
-	"include": [
-		"packages/*/src",
-		"packages/renderer/src/**/*.tsx",
-		"examples/**/src",
-		"electron.vite.config.ts",
-		"types"
-	],
-	"exclude": ["**/node_modules", "out", "release", "build"]
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noPropertyAccessFromIndexSignature": false,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@halcyon/core": ["./packages/core/src/index.ts"],
+      "@halcyon/ipc": ["./packages/ipc/src/index.ts"],
+      "@halcyon/plugin-sdk": ["./packages/plugin-sdk/src/index.ts"],
+      "@renderer/*": ["./packages/renderer/src/*"]
+    }
+  },
+  "include": [
+    "packages/*/src",
+    "packages/renderer/src/**/*.tsx",
+    "examples/**/src",
+    "electron.vite.config.ts",
+    "types"
+  ],
+  "exclude": ["**/node_modules", "out", "release", "build"]
 }

@@ -107,7 +107,8 @@ export function SettingsPage({
 											borderRadius: 9,
 											background: preset.value,
 											border:
-												settings.accent.toLowerCase() === preset.value.toLowerCase()
+												settings.accent.toLowerCase() ===
+												preset.value.toLowerCase()
 													? "2px solid var(--text)"
 													: "1px solid var(--border)",
 											cursor: "pointer",
@@ -201,7 +202,10 @@ export function SettingsPage({
 				</Card>
 
 				<Card>
-					<SectionHeader title="Game defaults" subtitle="Applied to newly created instances" />
+					<SectionHeader
+						title="Game defaults"
+						subtitle="Applied to newly created instances"
+					/>
 					<div className="col" style={{ marginTop: 14 }}>
 						<Field label={`Default memory · ${formatMemory(settings.defaultMemoryMb)}`}>
 							<Slider
@@ -225,7 +229,10 @@ export function SettingsPage({
 								}}
 							/>
 						</Field>
-						<Field label="Default Java executable" hint="Leave empty to let Halcyon choose per version">
+						<Field
+							label="Default Java executable"
+							hint="Leave empty to let Halcyon choose per version"
+						>
 							<TextInput
 								value={settings.defaultJavaPath ?? ""}
 								onChange={(value) => {
@@ -278,7 +285,9 @@ export function SettingsPage({
 								<TextInput
 									value={settings.screenshotDirectory ?? ""}
 									onChange={(value) => {
-										onUpdate({ screenshotDirectory: value === "" ? null : value })
+										onUpdate({
+											screenshotDirectory: value === "" ? null : value,
+										})
 									}}
 								/>
 								<Button
@@ -305,9 +314,15 @@ export function SettingsPage({
 				</Card>
 
 				<Card>
-					<SectionHeader title="Behaviour" subtitle="Notifications, presence and window handling" />
+					<SectionHeader
+						title="Behaviour"
+						subtitle="Notifications, presence and window handling"
+					/>
 					<div className="col" style={{ marginTop: 14 }}>
-						<Field label="Language" hint="Dates and numbers always follow your system locale">
+						<Field
+							label="Language"
+							hint="Dates and numbers always follow your system locale"
+						>
 							<Select
 								value={settings.language}
 								options={LANGUAGES}
@@ -352,8 +367,8 @@ export function SettingsPage({
 							}}
 						/>
 						<small>
-							Halcyon never uploads your accounts, tokens, worlds or logs. Usage data stays off unless you
-							turn it on.
+							Halcyon never uploads your accounts, tokens, worlds or logs. Usage data
+							stays off unless you turn it on.
 						</small>
 					</div>
 				</Card>
@@ -373,7 +388,9 @@ export function SettingsPage({
 								{update?.state ?? "idle"}
 							</Badge>
 							{update?.availableVersion === null || update === null ? null : (
-								<Badge tone="success">{update.availableVersion} ready to download</Badge>
+								<Badge tone="success">
+									{update.availableVersion} ready to download
+								</Badge>
 							)}
 						</div>
 						<div className="row wrap">

@@ -1,10 +1,25 @@
 import { useCallback } from "react"
 import type { DashboardData, InstanceSummary, ModrinthProject } from "@halcyon/ipc"
-import { Badge, Button, Card, EmptyState, ProgressBar, SectionHeader, Skeleton, StatTile } from "../components/primitives.tsx"
+import {
+	Badge,
+	Button,
+	Card,
+	EmptyState,
+	ProgressBar,
+	SectionHeader,
+	Skeleton,
+	StatTile,
+} from "../components/primitives.tsx"
 import { Icon } from "../components/Icon.tsx"
 import { invoke, openExternal } from "../lib/client.ts"
 import { useAsync, useIpcEvent } from "../lib/hooks.ts"
-import { formatCount, formatDate, formatPlaytime, formatRelative, initialsOf } from "../lib/format.ts"
+import {
+	formatCount,
+	formatDate,
+	formatPlaytime,
+	formatRelative,
+	initialsOf,
+} from "../lib/format.ts"
 import type { Navigate } from "../app/navigation.ts"
 
 function InstanceRow({
@@ -23,13 +38,19 @@ function InstanceRow({
 				<button
 					type="button"
 					className="btn ghost small"
-					style={{ justifyContent: "flex-start", padding: 0, border: "none", background: "none" }}
+					style={{
+						justifyContent: "flex-start",
+						padding: 0,
+						border: "none",
+						background: "none",
+					}}
 					onClick={onOpen}
 				>
 					<strong>{instance.name}</strong>
 				</button>
 				<small>
-					{instance.gameVersion} · {instance.loader} · played {formatRelative(instance.lastPlayedAt)}
+					{instance.gameVersion} · {instance.loader} · played{" "}
+					{formatRelative(instance.lastPlayedAt)}
 				</small>
 			</div>
 			{instance.running ? <Badge tone="success">Running</Badge> : null}
@@ -59,7 +80,9 @@ function ContentStrip({
 			/>
 			{projects.length === 0 ? (
 				<Card flat>
-					<small>Modrinth could not be reached. The rest of Halcyon keeps working offline.</small>
+					<small>
+						Modrinth could not be reached. The rest of Halcyon keeps working offline.
+					</small>
 				</Card>
 			) : (
 				<div className="grid cols-3">
@@ -72,13 +95,21 @@ function ContentStrip({
 									<img className="mod-art" src={project.iconUrl} alt="" />
 								)}
 								<div className="col" style={{ gap: 3, minWidth: 0 }}>
-									<strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+									<strong
+										style={{
+											overflow: "hidden",
+											textOverflow: "ellipsis",
+											whiteSpace: "nowrap",
+										}}
+									>
 										{project.title}
 									</strong>
 									<small>{formatCount(project.downloads)} downloads</small>
 								</div>
 							</div>
-							<small style={{ display: "block", marginTop: 10 }}>{project.description}</small>
+							<small style={{ display: "block", marginTop: 10 }}>
+								{project.description}
+							</small>
 						</Card>
 					))}
 				</div>
@@ -198,8 +229,16 @@ export function DashboardPage({ navigate }: { navigate: Navigate }): JSX.Element
 					<SectionHeader title="Last 7 days" subtitle="Minutes played per day" />
 					<div className="chart">
 						{data.statistics.last7Days.map((entry) => (
-							<div className="chart-bar" key={entry.date} title={`${entry.minutes} minutes`}>
-								<i style={{ height: `${Math.round((entry.minutes / peak) * 100)}%` }} />
+							<div
+								className="chart-bar"
+								key={entry.date}
+								title={`${entry.minutes} minutes`}
+							>
+								<i
+									style={{
+										height: `${Math.round((entry.minutes / peak) * 100)}%`,
+									}}
+								/>
 								<small>{entry.date.slice(5)}</small>
 							</div>
 						))}

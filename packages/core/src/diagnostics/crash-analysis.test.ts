@@ -43,9 +43,7 @@ test("detects duplicate mod ids", () => {
 })
 
 test("detects driver level graphics failures", () => {
-	const [diagnosis] = analyzeCrash(
-		"org.lwjgl.LWJGLException: Pixel format not accelerated",
-	)
+	const [diagnosis] = analyzeCrash("org.lwjgl.LWJGLException: Pixel format not accelerated")
 	assert.equal(diagnosis?.id, "gl-unsupported")
 })
 

@@ -48,9 +48,10 @@ export function PluginsPage(): JSX.Element {
 					subtitle="Drop a folder with halcyon.plugin.json into the plugins directory and reload"
 				/>
 				<small style={{ display: "block", marginTop: 8 }}>
-					Plugins run in the main process with a narrow, typed context: subscribe to launcher events,
-					contribute dashboard cards, send notifications and read instances or settings. The full API
-					reference lives in docs/plugin-api.md, with two runnable examples under examples/plugins.
+					Plugins run in the main process with a narrow, typed context: subscribe to
+					launcher events, contribute dashboard cards, send notifications and read
+					instances or settings. The full API reference lives in docs/plugin-api.md, with
+					two runnable examples under examples/plugins.
 				</small>
 			</Card>
 
@@ -72,18 +73,23 @@ export function PluginsPage(): JSX.Element {
 								<div className="col" style={{ gap: 2 }}>
 									<strong>{plugin.name}</strong>
 									<small>
-										v{plugin.version} · {plugin.author ?? "unknown author"} · API {plugin.apiVersion}
+										v{plugin.version} · {plugin.author ?? "unknown author"} ·
+										API {plugin.apiVersion}
 									</small>
 								</div>
 								<Toggle
 									checked={plugin.enabled}
 									onChange={(value) => {
-										void invoke("plugins:setEnabled", plugin.id, value).then(plugins.reload)
+										void invoke("plugins:setEnabled", plugin.id, value).then(
+											plugins.reload,
+										)
 									}}
 								/>
 							</div>
 							{plugin.description === null ? null : (
-								<small style={{ display: "block", marginTop: 10 }}>{plugin.description}</small>
+								<small style={{ display: "block", marginTop: 10 }}>
+									{plugin.description}
+								</small>
 							)}
 							<div className="row wrap" style={{ marginTop: 10, gap: 6 }}>
 								{plugin.error === null ? (

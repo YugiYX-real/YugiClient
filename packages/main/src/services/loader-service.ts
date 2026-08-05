@@ -206,7 +206,9 @@ export class LoaderService {
 						stable: recommended !== undefined && build.startsWith(recommended),
 						recommended:
 							(recommended !== undefined && build.startsWith(recommended)) ||
-							(recommended === undefined && latest !== undefined && build.startsWith(latest)),
+							(recommended === undefined &&
+								latest !== undefined &&
+								build.startsWith(latest)),
 					}
 				})
 				.sort((left, right) => compareSemver(right.id, left.id))
@@ -266,7 +268,10 @@ export class LoaderService {
 	}
 
 	private libraryPath(coordinate: string): string {
-		return join(this.paths.libraries, ...mavenRelativePath(parseMavenCoordinate(coordinate)).split("/"))
+		return join(
+			this.paths.libraries,
+			...mavenRelativePath(parseMavenCoordinate(coordinate)).split("/"),
+		)
 	}
 
 	private async installForgeLike(
@@ -397,7 +402,10 @@ export class LoaderService {
 		if (argument.startsWith("[") && argument.endsWith("]")) {
 			return this.libraryPath(argument.slice(1, -1))
 		}
-		return argument.replace(/\{([A-Z0-9_]+)\}/g, (match, key: string) => values.get(key) ?? match)
+		return argument.replace(
+			/\{([A-Z0-9_]+)\}/g,
+			(match, key: string) => values.get(key) ?? match,
+		)
 	}
 
 	private async mainClassOf(jarPath: string): Promise<string> {
@@ -445,7 +453,9 @@ export class LoaderService {
 			const mainClass = await this.mainClassOf(jarPath)
 			const args = processor.args.map((argument) => this.substitute(argument, values))
 
-			this.logger.info(`Running installer processor ${index + 1}/${processors.length}: ${mainClass}`)
+			this.logger.info(
+				`Running installer processor ${index + 1}/${processors.length}: ${mainClass}`,
+			)
 			await run(javaExecutableName(), ["-cp", classpath, mainClass, ...args], {
 				maxBuffer: 32 * 1024 * 1024,
 				windowsHide: true,

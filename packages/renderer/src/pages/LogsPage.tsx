@@ -78,7 +78,10 @@ export function LogsPage(): JSX.Element {
 					onClick={() => {
 						void navigator.clipboard.writeText(
 							lines
-								.map((line) => `${line.timestamp} [${line.level}] ${line.scope} ${line.message}`)
+								.map(
+									(line) =>
+										`${line.timestamp} [${line.level}] ${line.scope} ${line.message}`,
+								)
 								.join("\n"),
 						)
 					}}
@@ -117,7 +120,9 @@ export function LogsPage(): JSX.Element {
 						</button>
 					))}
 					<span className="spacer" />
-					{bundle.data?.truncated === true ? <Badge tone="warning">output truncated</Badge> : null}
+					{bundle.data?.truncated === true ? (
+						<Badge tone="warning">output truncated</Badge>
+					) : null}
 					<Badge>{lines.length} lines</Badge>
 				</div>
 			</Card>
@@ -127,7 +132,10 @@ export function LogsPage(): JSX.Element {
 					<small>No matching log lines.</small>
 				) : (
 					lines.map((line, index) => (
-						<div className={`log-line ${line.level}`} key={`${line.timestamp}-${index}`}>
+						<div
+							className={`log-line ${line.level}`}
+							key={`${line.timestamp}-${index}`}
+						>
 							<span className="time">{line.timestamp.slice(11, 19)}</span>
 							<span className="lvl">{line.level}</span>
 							<span className="msg">

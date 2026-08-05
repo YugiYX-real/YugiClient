@@ -130,9 +130,7 @@ test("feature gated resolution arguments are emitted only when requested", () =>
 	const without = buildLaunchInvocation(request())
 	assert.ok(!without.args.includes("--width"))
 
-	const withResolution = buildLaunchInvocation(
-		request({ window: { width: 1600, height: 900 } }),
-	)
+	const withResolution = buildLaunchInvocation(request({ window: { width: 1600, height: 900 } }))
 	assert.ok(withResolution.args.includes("--width"))
 	assert.ok(withResolution.args.includes("1600"))
 	assert.equal(withResolution.args.filter((arg) => arg === "--width").length, 1)
@@ -162,7 +160,9 @@ test("legacy versions fall back to minecraftArguments and default jvm flags", ()
 	}
 	const invocation = buildLaunchInvocation(request({ version: legacy }))
 	assert.ok(invocation.args.includes("--session"))
-	assert.ok(invocation.args.includes("token:super-secret-token:069a79f4-44e9-4726-a5be-fca90e38aaf5"))
+	assert.ok(
+		invocation.args.includes("token:super-secret-token:069a79f4-44e9-4726-a5be-fca90e38aaf5"),
+	)
 	assert.ok(invocation.args.includes("-cp"))
 })
 
