@@ -20,6 +20,8 @@ export function useAsync<T>(
 	const loaderRef = useRef(loader)
 	loaderRef.current = loader
 
+	// The dependency list belongs to the caller, so it is spread in dynamically and the loader is
+	// read through a ref to keep the effect stable across renders.
 	useEffect(() => {
 		let active = true
 		setLoading(true)
@@ -44,7 +46,6 @@ export function useAsync<T>(
 		return () => {
 			active = false
 		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [...dependencies, nonce])
 
 	const reload = useCallback(() => {
