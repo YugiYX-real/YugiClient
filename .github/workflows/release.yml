@@ -5,6 +5,12 @@ on:
     tags: ["v*"]
   release:
     types: [published]
+  workflow_call:
+    inputs:
+      tag:
+        description: "Tag to release, for example v1.2.3"
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       tag:
@@ -13,7 +19,7 @@ on:
         type: string
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.tag || github.ref }}
   cancel-in-progress: false
 
 permissions:
