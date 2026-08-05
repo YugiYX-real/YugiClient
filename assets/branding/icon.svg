@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Halcyon">
+	<defs>
+		<linearGradient id="shell" x1="0" y1="0" x2="1" y2="1">
+			<stop offset="0" stop-color="#141B29" />
+			<stop offset="1" stop-color="#090C12" />
+		</linearGradient>
+		<linearGradient id="aurora" x1="0" y1="1" x2="1" y2="0">
+			<stop offset="0" stop-color="#7C5CFF" />
+			<stop offset="0.55" stop-color="#5AA9FF" />
+			<stop offset="1" stop-color="#39E0C8" />
+		</linearGradient>
+		<linearGradient id="mark" x1="0" y1="1" x2="1" y2="0">
+			<stop offset="0" stop-color="#A88CFF" />
+			<stop offset="1" stop-color="#5BE9D6" />
+		</linearGradient>
+		<filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+			<feGaussianBlur stdDeviation="38" />
+		</filter>
+		<clipPath id="rounded">
+			<rect x="0" y="0" width="512" height="512" rx="116" ry="116" />
+		</clipPath>
+	</defs>
+
+	<g clip-path="url(#rounded)">
+		<rect x="0" y="0" width="512" height="512" fill="url(#shell)" />
+		<ellipse cx="126" cy="430" rx="210" ry="150" fill="#7C5CFF" opacity="0.55" filter="url(#soft)" />
+		<ellipse cx="400" cy="120" rx="190" ry="140" fill="#39E0C8" opacity="0.38" filter="url(#soft)" />
+		<path
+			d="M-20 352 C 90 300 150 380 256 340 C 356 302 420 236 532 268 L 532 532 L -20 532 Z"
+			fill="url(#aurora)"
+			opacity="0.16"
+		/>
+
+		<g fill="url(#mark)">
+			<rect x="150" y="128" width="52" height="256" rx="26" />
+			<rect x="310" y="128" width="52" height="256" rx="26" />
+			<path d="M176 300 L336 186 A 26 26 0 0 1 366 228 L 206 342 A 26 26 0 0 1 176 300 Z" />
+		</g>
+
+		<circle cx="366" cy="146" r="13" fill="#FFFFFF" opacity="0.9" />
+		<circle cx="146" cy="368" r="8" fill="#39E0C8" opacity="0.85" />
+		<rect
+			x="6"
+			y="6"
+			width="500"
+			height="500"
+			rx="112"
+			fill="none"
+			stroke="#FFFFFF"
+			stroke-opacity="0.09"
+			stroke-width="3"
+		/>
+	</g>
+</svg>

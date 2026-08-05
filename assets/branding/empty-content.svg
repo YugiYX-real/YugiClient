@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 180" width="240" height="180" role="img" aria-label="No content installed">
+	<defs>
+		<linearGradient id="emptyContentStroke" x1="0" y1="1" x2="1" y2="0">
+			<stop offset="0" stop-color="#39E0C8" />
+			<stop offset="1" stop-color="#FFB86B" />
+		</linearGradient>
+	</defs>
+
+	<ellipse cx="120" cy="152" rx="74" ry="11" fill="#39E0C8" opacity="0.12" />
+
+	<g
+		fill="none"
+		stroke="url(#emptyContentStroke)"
+		stroke-width="3"
+		stroke-linecap="round"
+		stroke-linejoin="round"
+	>
+		<rect x="62" y="48" width="116" height="84" rx="14" />
+		<path d="M62 74 L178 74" opacity="0.6" />
+		<path d="M84 96 L128 96" opacity="0.5" />
+		<path d="M84 112 L110 112" opacity="0.35" />
+		<path d="M120 22 L120 40" opacity="0.5" />
+		<path d="M112 32 L120 40 L128 32" opacity="0.5" />
+	</g>
+
+	<circle cx="76" cy="61" r="4" fill="#FFB86B" opacity="0.9" />
+	<circle cx="90" cy="61" r="4" fill="#39E0C8" opacity="0.7" />
+</svg>

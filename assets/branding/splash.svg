@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 420" width="720" height="420" role="img" aria-label="Halcyon splash">
+	<defs>
+		<linearGradient id="splashShell" x1="0" y1="0" x2="1" y2="1">
+			<stop offset="0" stop-color="#121826" />
+			<stop offset="1" stop-color="#080B11" />
+		</linearGradient>
+		<linearGradient id="splashMark" x1="0" y1="1" x2="1" y2="0">
+			<stop offset="0" stop-color="#A88CFF" />
+			<stop offset="1" stop-color="#5BE9D6" />
+		</linearGradient>
+		<linearGradient id="splashBar" x1="0" y1="0" x2="1" y2="0">
+			<stop offset="0" stop-color="#7C5CFF" />
+			<stop offset="1" stop-color="#39E0C8" />
+		</linearGradient>
+		<filter id="splashGlow" x="-50%" y="-50%" width="200%" height="200%">
+			<feGaussianBlur stdDeviation="46" />
+		</filter>
+		<clipPath id="splashClip">
+			<rect x="0" y="0" width="720" height="420" rx="22" ry="22" />
+		</clipPath>
+	</defs>
+
+	<g clip-path="url(#splashClip)">
+		<rect width="720" height="420" fill="url(#splashShell)" />
+		<ellipse cx="120" cy="400" rx="260" ry="170" fill="#7C5CFF" opacity="0.5" filter="url(#splashGlow)" />
+		<ellipse cx="620" cy="60" rx="230" ry="150" fill="#39E0C8" opacity="0.34" filter="url(#splashGlow)" />
+		<path
+			d="M-20 300 C 120 250 220 330 360 292 C 500 254 600 200 740 236 L 740 440 L -20 440 Z"
+			fill="url(#splashBar)"
+			opacity="0.14"
+		/>
+
+		<g transform="translate(300 108)" fill="url(#splashMark)">
+			<rect x="0" y="0" width="26" height="116" rx="13" />
+			<rect x="78" y="0" width="26" height="116" rx="13" />
+			<path d="M13 82 L91 26 A 13 13 0 0 1 104 48 L 26 104 A 13 13 0 0 1 13 82 Z" />
+		</g>
+
+		<text
+			x="360"
+			y="286"
+			text-anchor="middle"
+			font-family="Inter, 'Segoe UI', system-ui, sans-serif"
+			font-size="42"
+			font-weight="700"
+			letter-spacing="12"
+			fill="#E8ECF5"
+		>
+			HALCYON
+		</text>
+		<text
+			x="360"
+			y="316"
+			text-anchor="middle"
+			font-family="Inter, 'Segoe UI', system-ui, sans-serif"
+			font-size="15"
+			letter-spacing="6"
+			fill="#8B95AC"
+		>
+			LAUNCH BEAUTIFULLY.
+		</text>
+
+		<rect x="260" y="356" width="200" height="6" rx="3" fill="#FFFFFF" opacity="0.08" />
+		<rect x="260" y="356" width="96" height="6" rx="3" fill="url(#splashBar)" />
+		<rect
+			x="1"
+			y="1"
+			width="718"
+			height="418"
+			rx="21"
+			fill="none"
+			stroke="#FFFFFF"
+			stroke-opacity="0.08"
+			stroke-width="2"
+		/>
+	</g>
+</svg>

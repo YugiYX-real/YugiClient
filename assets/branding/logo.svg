@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="Halcyon mark">
+	<defs>
+		<linearGradient id="logoMark" x1="0" y1="1" x2="1" y2="0">
+			<stop offset="0" stop-color="#7C5CFF" />
+			<stop offset="0.5" stop-color="#5AA9FF" />
+			<stop offset="1" stop-color="#39E0C8" />
+		</linearGradient>
+		<linearGradient id="logoHalo" x1="0" y1="0" x2="1" y2="1">
+			<stop offset="0" stop-color="#7C5CFF" stop-opacity="0.35" />
+			<stop offset="1" stop-color="#39E0C8" stop-opacity="0.12" />
+		</linearGradient>
+	</defs>
+
+	<circle cx="128" cy="128" r="120" fill="url(#logoHalo)" />
+	<circle cx="128" cy="128" r="120" fill="none" stroke="url(#logoMark)" stroke-width="4" stroke-opacity="0.5" />
+
+	<g fill="url(#logoMark)">
+		<rect x="70" y="62" width="30" height="132" rx="15" />
+		<rect x="156" y="62" width="30" height="132" rx="15" />
+		<path d="M85 152 L171 90 A 15 15 0 0 1 188 114 L 102 176 A 15 15 0 0 1 85 152 Z" />
+	</g>
+
+	<circle cx="188" cy="72" r="7" fill="#FFFFFF" opacity="0.92" />
+</svg>
