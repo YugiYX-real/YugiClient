@@ -81,15 +81,35 @@ jobs:
             echo "| --- | --- |"
             echo "| Windows installer | \`Halcyon-${{ steps.resolve.outputs.version }}-setup.exe\` |"
             echo "| Windows portable | \`Halcyon-${{ steps.resolve.outputs.version }}-portable.exe\` |"
-            echo "| Linux AppImage | \`Halcyon-${{ steps.resolve.outputs.version }}-x64.AppImage\` |"
+            echo "| Linux AppImage | \`Halcyon-${{ steps.resolve.outputs.version }}-x86_64.AppImage\` |"
             echo "| Linux archive | \`Halcyon-${{ steps.resolve.outputs.version }}-x64.tar.gz\` |"
-            echo "| macOS disk image | \`Halcyon-${{ steps.resolve.outputs.version }}-x64.dmg\` |"
+            echo "| macOS Intel | \`Halcyon-${{ steps.resolve.outputs.version }}-x64.dmg\` |"
+            echo "| macOS Apple silicon | \`Halcyon-${{ steps.resolve.outputs.version }}-arm64.dmg\` |"
             echo
             echo "Every artifact is verified with sha512 by the in-app updater."
             echo
             echo "Build ${{ github.run_number }} · commit ${GITHUB_SHA::7}"
           } > RELEASE_NOTES.md
           cat RELEASE_NOTES.md
+
+      - name: Reserve the release before the matrix uploads assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.resolve.outputs.tag }}
+          VERSION: ${{ steps.resolve.outputs.version }}
+        shell: bash
+        run: |
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "Release ${TAG} already exists, reusing it."
+            gh release edit "$TAG" \
+              --title "Halcyon $VERSION" \
+              --notes-file RELEASE_NOTES.md
+          else
+            gh release create "$TAG" \
+              --title "Halcyon $VERSION" \
+              --notes-file RELEASE_NOTES.md \
+              --draft
+          fi
 
       - name: Upload changelog
         uses: actions/upload-artifact@v4
