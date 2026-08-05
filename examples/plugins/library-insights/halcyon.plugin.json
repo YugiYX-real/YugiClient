@@ -1,0 +1,9 @@
+{
+	"id": "library-insights",
+	"name": "Library Insights",
+	"version": "1.0.0",
+	"description": "Summarises your instance library and flags instances that outgrew their memory budget.",
+	"author": "Halcyon",
+	"apiVersion": 1,
+	"main": "index.mjs"
+}

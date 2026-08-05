@@ -1,0 +1,9 @@
+{
+	"id": "playtime-tracker",
+	"name": "Playtime Tracker",
+	"version": "1.0.0",
+	"description": "Times every session and shows today's playtime on the dashboard.",
+	"author": "Halcyon",
+	"apiVersion": 1,
+	"main": "index.mjs"
+}

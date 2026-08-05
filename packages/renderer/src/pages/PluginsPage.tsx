@@ -72,7 +72,7 @@ export function PluginsPage(): JSX.Element {
 								<div className="col" style={{ gap: 2 }}>
 									<strong>{plugin.name}</strong>
 									<small>
-										v{plugin.version} · {plugin.author} · API {plugin.apiVersion}
+										v{plugin.version} · {plugin.author ?? "unknown author"} · API {plugin.apiVersion}
 									</small>
 								</div>
 								<Toggle
@@ -82,7 +82,9 @@ export function PluginsPage(): JSX.Element {
 									}}
 								/>
 							</div>
-							<small style={{ display: "block", marginTop: 10 }}>{plugin.description}</small>
+							{plugin.description === null ? null : (
+								<small style={{ display: "block", marginTop: 10 }}>{plugin.description}</small>
+							)}
 							<div className="row wrap" style={{ marginTop: 10, gap: 6 }}>
 								{plugin.error === null ? (
 									<Badge tone={plugin.enabled ? "success" : "neutral"}>
@@ -91,9 +93,12 @@ export function PluginsPage(): JSX.Element {
 								) : (
 									<Badge tone="danger">{plugin.error}</Badge>
 								)}
-								{plugin.contributedCards > 0 ? (
-									<Badge tone="accent">{plugin.contributedCards} dashboard cards</Badge>
-								) : null}
+								{plugin.contributedCards.length === 0 ? null : (
+									<Badge tone="accent">
+										{plugin.contributedCards.length} dashboard card
+										{plugin.contributedCards.length === 1 ? "" : "s"}
+									</Badge>
+								)}
 								<span className="spacer" />
 								<Button
 									size="small"
