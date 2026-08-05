@@ -1,6 +1,11 @@
 const BYTE_UNITS = ["B", "KB", "MB", "GB", "TB"] as const
 
-export function formatBytes(bytes: number, fractionDigits = 1): string {
+const UNKNOWN = "—"
+
+export function formatBytes(bytes: number | null, fractionDigits = 1): string {
+	if (bytes === null) {
+		return UNKNOWN
+	}
 	if (!Number.isFinite(bytes) || bytes <= 0) {
 		return "0 B"
 	}
@@ -11,12 +16,12 @@ export function formatBytes(bytes: number, fractionDigits = 1): string {
 }
 
 export function formatSpeed(bytesPerSecond: number): string {
-	return bytesPerSecond <= 0 ? "—" : `${formatBytes(bytesPerSecond)}/s`
+	return bytesPerSecond <= 0 ? UNKNOWN : `${formatBytes(bytesPerSecond)}/s`
 }
 
 export function formatEta(seconds: number | null): string {
 	if (seconds === null || !Number.isFinite(seconds) || seconds <= 0) {
-		return "—"
+		return UNKNOWN
 	}
 	if (seconds < 60) {
 		return `${Math.ceil(seconds)}s`
@@ -28,8 +33,8 @@ export function formatEta(seconds: number | null): string {
 	return `${Math.floor(minutes / 60)}h ${minutes % 60}m`
 }
 
-export function formatPlaytime(minutes: number): string {
-	if (minutes <= 0) {
+export function formatPlaytime(minutes: number | null): string {
+	if (minutes === null || minutes <= 0) {
 		return "Not played yet"
 	}
 	if (minutes < 60) {
@@ -40,7 +45,10 @@ export function formatPlaytime(minutes: number): string {
 	return rest === 0 ? `${hours} h` : `${hours} h ${rest} min`
 }
 
-export function formatCount(value: number): string {
+export function formatCount(value: number | null): string {
+	if (value === null) {
+		return UNKNOWN
+	}
 	if (value >= 1_000_000) {
 		return `${(value / 1_000_000).toFixed(1)}M`
 	}
@@ -52,11 +60,11 @@ export function formatCount(value: number): string {
 
 export function formatDate(iso: string | null): string {
 	if (iso === null || iso === "") {
-		return "—"
+		return UNKNOWN
 	}
 	const date = new Date(iso)
 	if (Number.isNaN(date.getTime())) {
-		return "—"
+		return UNKNOWN
 	}
 	return date.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })
 }
@@ -92,7 +100,10 @@ export function formatRelative(iso: string | null): string {
 	return formatter.format(Math.round(deltaSeconds / 31_536_000), "year")
 }
 
-export function formatMemory(megabytes: number): string {
+export function formatMemory(megabytes: number | null): string {
+	if (megabytes === null) {
+		return UNKNOWN
+	}
 	return megabytes >= 1024 ? `${(megabytes / 1024).toFixed(1)} GB` : `${megabytes} MB`
 }
 

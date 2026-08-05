@@ -410,22 +410,26 @@ export function DashboardPage({ navigate }: { navigate: Navigate }): JSX.Element
 			<div className="col">
 				<SectionHeader title="News" subtitle="Straight from the Minecraft version feed" />
 				<div className="grid cols-3">
-					{data.news.map((item) => (
-						<Card
-							key={item.id}
-							interactive
-							onClick={() => {
-								openExternal(item.url)
-							}}
-						>
-							<div className="row between">
-								<Badge>{item.source}</Badge>
-								<small>{formatDate(item.publishedAt)}</small>
-							</div>
-							<h3 style={{ marginTop: 10 }}>{item.title}</h3>
-							<small style={{ display: "block", marginTop: 6 }}>{item.summary}</small>
-						</Card>
-					))}
+					{data.news.map((item) => {
+						const url = item.url
+						const open = (): void => {
+							if (url !== null) {
+								openExternal(url)
+							}
+						}
+						return (
+							<Card key={item.id} interactive={url !== null} onClick={open}>
+								<div className="row between">
+									<Badge>{item.source}</Badge>
+									<small>{formatDate(item.publishedAt)}</small>
+								</div>
+								<h3 style={{ marginTop: 10 }}>{item.title}</h3>
+								<small style={{ display: "block", marginTop: 6 }}>
+									{item.summary}
+								</small>
+							</Card>
+						)
+					})}
 				</div>
 			</div>
 		</>
