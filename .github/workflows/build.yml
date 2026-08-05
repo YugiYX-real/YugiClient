@@ -22,6 +22,11 @@ jobs:
     name: Bundle and test
     runs-on: ubuntu-latest
     steps:
+      - name: Use unix line endings for every checkout
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -64,6 +69,11 @@ jobs:
             label: macos
             flag: --mac
     steps:
+      - name: Use unix line endings for every checkout
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+
       - name: Checkout
         uses: actions/checkout@v4
 
