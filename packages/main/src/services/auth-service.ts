@@ -5,6 +5,11 @@ import type { EventBus } from "../infra/events.ts"
 import type { HttpClient } from "../infra/http.ts"
 import type { JsonStore } from "../infra/json-store.ts"
 import type { Logger } from "../infra/logger.ts"
+import {
+	exchangeLiveCode,
+	refreshLiveTokens,
+	requestLiveAuthorizationCode,
+} from "./msa-live-auth.ts"
 
 const DEVICE_CODE_URL = "https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode"
 const TOKEN_URL = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token"
@@ -14,12 +19,16 @@ const MINECRAFT_LOGIN_URL = "https://api.minecraftservices.com/authentication/lo
 const MINECRAFT_PROFILE_URL = "https://api.minecraftservices.com/minecraft/profile"
 const AVATAR_BASE_URL = "https://crafatar.com/avatars/"
 const SCOPE = "XboxLive.signin offline_access"
+const AZURE_CLIENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export const FALLBACK_CLIENT_ID = "00000000402b5328"
+
+export type AuthFlow = "device" | "live"
 
 export type StoredAccount = Account & {
 	readonly accessToken: string | null
 	readonly refreshToken: string | null
+	readonly authFlow?: AuthFlow
 }
 
 export type AccountState = { accounts: StoredAccount[] }
@@ -124,9 +133,18 @@ export class AuthService {
 		this.events = dependencies.events
 	}
 
-	private clientId(): string {
+	private configuredClientId(): string {
 		const configured = process.env.HALCYON_MSA_CLIENT_ID
-		return configured === undefined || configured === "" ? FALLBACK_CLIENT_ID : configured
+		return configured === undefined ? "" : configured.trim()
+	}
+
+	private clientId(): string {
+		const configured = this.configuredClientId()
+		return configured === "" ? FALLBACK_CLIENT_ID : configured
+	}
+
+	private flow(): AuthFlow {
+		return AZURE_CLIENT_ID.test(this.configuredClientId()) ? "device" : "live"
 	}
 
 	async list(): Promise<readonly Account[]> {
@@ -191,7 +209,32 @@ export class AuthService {
 	}
 
 	async loginMicrosoft(): Promise<Account> {
-		const clientId = this.clientId()
+		const configured = this.configuredClientId()
+		if (configured !== "" && !AZURE_CLIENT_ID.test(configured)) {
+			throw new Error(
+				"HALCYON_MSA_CLIENT_ID must be the Application (client) ID of your Azure app, written as a UUID. Unset it to use the built-in sign-in instead.",
+			)
+		}
+
+		if (this.flow() === "device") {
+			return this.loginWithDeviceCode(configured)
+		}
+		return this.loginWithSignInWindow()
+	}
+
+	private async loginWithSignInWindow(): Promise<Account> {
+		this.events.toast(
+			"info",
+			"Sign in to your Microsoft account",
+			"A secure Microsoft window just opened",
+		)
+
+		const code = await requestLiveAuthorizationCode(FALLBACK_CLIENT_ID)
+		const tokens = await exchangeLiveCode(this.http, FALLBACK_CLIENT_ID, code)
+		return this.completeMicrosoftLogin(tokens, "live")
+	}
+
+	private async loginWithDeviceCode(clientId: string): Promise<Account> {
 		const device = await this.http.json<DeviceCodeResponse>(DEVICE_CODE_URL, {
 			method: "POST",
 			headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -257,10 +300,13 @@ export class AuthService {
 			throw new Error("Microsoft sign-in timed out before it was approved")
 		}
 
-		return this.completeMicrosoftLogin(tokens)
+		return this.completeMicrosoftLogin(tokens, "device")
 	}
 
-	private async completeMicrosoftLogin(tokens: TokenResponse): Promise<Account> {
+	private async completeMicrosoftLogin(
+		tokens: TokenResponse,
+		authFlow: AuthFlow,
+	): Promise<Account> {
 		const xbl = await this.http.json<XboxResponse>(XBL_URL, {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -268,7 +314,7 @@ export class AuthService {
 				Properties: {
 					AuthMethod: "RPS",
 					SiteName: "user.auth.xboxlive.com",
-					RpsTicket: `d=${tokens.access_token}`,
+					RpsTicket: authFlow === "live" ? tokens.access_token : `d=${tokens.access_token}`,
 				},
 				RelyingParty: "http://auth.xboxlive.com",
 				TokenType: "JWT",
@@ -320,6 +366,7 @@ export class AuthService {
 			lastUsedAt: new Date().toISOString(),
 			accessToken: minecraft.access_token,
 			refreshToken: tokens.refresh_token ?? existing?.refreshToken ?? null,
+			authFlow,
 		}
 
 		const next = [
@@ -349,6 +396,12 @@ export class AuthService {
 			throw new Error("This account has no refresh token; sign in again")
 		}
 
+		const authFlow = account.authFlow ?? this.flow()
+		if (authFlow === "live") {
+			const tokens = await refreshLiveTokens(this.http, FALLBACK_CLIENT_ID, refreshToken)
+			return this.completeMicrosoftLogin(tokens, "live")
+		}
+
 		const tokens = await this.http.json<TokenResponse>(TOKEN_URL, {
 			method: "POST",
 			headers: {
@@ -363,7 +416,7 @@ export class AuthService {
 			}).toString(),
 		})
 
-		return this.completeMicrosoftLogin(tokens)
+		return this.completeMicrosoftLogin(tokens, "device")
 	}
 
 	async validAccessToken(accountId: string): Promise<string | null> {

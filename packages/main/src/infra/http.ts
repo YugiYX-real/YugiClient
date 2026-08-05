@@ -9,12 +9,15 @@ import type { Logger } from "./logger.ts"
 export class HttpError extends Error {
 	readonly status: number
 	readonly url: string
+	readonly details: string
 
-	constructor(status: number, url: string, statusText: string) {
-		super(`Request failed with ${status} ${statusText}: ${url}`)
+	constructor(status: number, url: string, statusText: string, details = "") {
+		const summary = `Request failed with ${status} ${statusText}: ${url}`
+		super(details === "" ? summary : `${summary} - ${details}`)
 		this.name = "HttpError"
 		this.status = status
 		this.url = url
+		this.details = details
 	}
 }
 
@@ -50,11 +53,21 @@ export type DownloadOptions = {
 }
 
 const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504])
+const DETAIL_LIMIT = 400
 
 function delay(ms: number): Promise<void> {
 	return new Promise((resolve) => {
 		setTimeout(resolve, ms)
 	})
+}
+
+async function describeFailure(response: Response): Promise<string> {
+	try {
+		const body = await response.text()
+		return body.trim().replace(/\s+/g, " ").slice(0, DETAIL_LIMIT)
+	} catch {
+		return ""
+	}
 }
 
 export async function sha1OfFile(filePath: string): Promise<string> {
@@ -108,7 +121,12 @@ export class HttpClient {
 					return response
 				}
 				if (!RETRYABLE_STATUS.has(response.status) || attempt === retries) {
-					throw new HttpError(response.status, url, response.statusText)
+					throw new HttpError(
+						response.status,
+						url,
+						response.statusText,
+						await describeFailure(response),
+					)
 				}
 				lastError = new HttpError(response.status, url, response.statusText)
 			} catch (error) {
