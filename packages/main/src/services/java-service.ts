@@ -9,15 +9,10 @@ import { directorySize, pathExists, unzipToDirectory } from "../infra/fs-extra.t
 import type { AppPaths } from "../infra/paths.ts"
 import type { HttpClient } from "../infra/http.ts"
 import type { Logger } from "../infra/logger.ts"
-import { adoptiumArch, adoptiumOs, javaExecutableName } from "../infra/platform.ts"
+import { javaExecutableName } from "../infra/platform.ts"
+import { adoptiumJreUrl } from "./adoptium.ts"
 
 const run = promisify(execFile)
-
-function adoptiumUrl(major: number): string {
-	const os = adoptiumOs()
-	const architecture = adoptiumArch()
-	return `https://api.adoptium.net/v3/binary/latest/${major}/ga/${os}/${architecture}/jre/hotspot/normal/eclipse`
-}
 
 function candidateRoots(): readonly string[] {
 	const home = homedir()
@@ -216,7 +211,7 @@ export class JavaService {
 		const isWindows = platform() === "win32"
 		const archivePath = join(this.paths.cache, `jre-${major}${isWindows ? ".zip" : ".tar.gz"}`)
 		this.logger.info(`Downloading a managed Java ${major} runtime`)
-		await this.http.download(adoptiumUrl(major), archivePath, { skipIfValid: false })
+		await this.http.download(adoptiumJreUrl(major), archivePath, { skipIfValid: false })
 		await mkdir(destination, { recursive: true })
 
 		if (isWindows) {
