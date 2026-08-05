@@ -1,0 +1,9 @@
+{
+	"name": "@halcyon-example/library-insights",
+	"version": "1.0.0",
+	"description": "Example Halcyon plugin that summarises the instance library.",
+	"private": true,
+	"type": "module",
+	"main": "index.mjs",
+	"license": "MIT"
+}

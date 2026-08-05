@@ -1,0 +1,100 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CSC_IDENTITY_AUTO_DISCOVERY: false
+
+jobs:
+  bundle:
+    name: Bundle and test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Verify everything
+        run: npm run verify
+
+      - name: Build renderer, preload and main
+        run: npm run build
+
+      - name: Upload bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: halcyon-bundle
+          path: out
+          retention-days: 7
+
+  binaries:
+    name: Binaries for ${{ matrix.label }}
+    needs: bundle
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            label: windows
+            flag: --win
+          - os: ubuntu-latest
+            label: linux
+            flag: --linux
+          - os: macos-latest
+            label: macos
+            flag: --mac
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build application
+        run: npm run build
+
+      - name: Generate branding assets
+        run: npm run assets:icons
+
+      - name: Package unsigned binaries
+        run: npx --no-install electron-builder ${{ matrix.flag }} --publish never
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: halcyon-${{ matrix.label }}
+          path: |
+            dist/*.exe
+            dist/*.msi
+            dist/*.AppImage
+            dist/*.tar.gz
+            dist/*.dmg
+            dist/*.zip
+            dist/latest*.yml
+          if-no-files-found: error
+          retention-days: 14

@@ -1,0 +1,190 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release, for example v1.2.3"
+        required: true
+        type: string
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  CSC_IDENTITY_AUTO_DISCOVERY: false
+
+jobs:
+  prepare:
+    name: Resolve version and changelog
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      version: ${{ steps.resolve.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve tag
+        id: resolve
+        shell: bash
+        run: |
+          if [ -n "${{ inputs.tag }}" ]; then
+            TAG="${{ inputs.tag }}"
+          elif [ "${{ github.event_name }}" = "release" ]; then
+            TAG="${{ github.event.release.tag_name }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate changelog
+        shell: bash
+        run: |
+          TAG="${{ steps.resolve.outputs.tag }}"
+          PREVIOUS="$(git tag --sort=-v:refname | grep -v "^${TAG}$" | head -n 1 || true)"
+          {
+            echo "## Halcyon ${{ steps.resolve.outputs.version }}"
+            echo
+            if [ -n "${PREVIOUS}" ]; then
+              echo "### Changes since ${PREVIOUS}"
+              echo
+              git log --no-merges --pretty=format:'- %s (%h)' "${PREVIOUS}..${TAG}" || \
+                git log --no-merges --pretty=format:'- %s (%h)' "${PREVIOUS}..HEAD"
+            else
+              echo "### Initial release"
+              echo
+              git log --no-merges --pretty=format:'- %s (%h)' | head -n 100
+            fi
+            echo
+            echo
+            echo "### Downloads"
+            echo
+            echo "| Platform | File |"
+            echo "| --- | --- |"
+            echo "| Windows installer | \`Halcyon-${{ steps.resolve.outputs.version }}-setup.exe\` |"
+            echo "| Windows portable | \`Halcyon-${{ steps.resolve.outputs.version }}-portable.exe\` |"
+            echo "| Linux AppImage | \`Halcyon-${{ steps.resolve.outputs.version }}-x64.AppImage\` |"
+            echo "| Linux archive | \`Halcyon-${{ steps.resolve.outputs.version }}-x64.tar.gz\` |"
+            echo "| macOS disk image | \`Halcyon-${{ steps.resolve.outputs.version }}-x64.dmg\` |"
+            echo
+            echo "Every artifact is verified with sha512 by the in-app updater."
+            echo
+            echo "Build ${{ github.run_number }} · commit ${GITHUB_SHA::7}"
+          } > RELEASE_NOTES.md
+          cat RELEASE_NOTES.md
+
+      - name: Upload changelog
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: RELEASE_NOTES.md
+          retention-days: 30
+
+  publish:
+    name: Publish ${{ matrix.label }} assets
+    needs: prepare
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            label: windows
+            flag: --win
+          - os: ubuntu-latest
+            label: linux
+            flag: --linux
+          - os: macos-latest
+            label: macos
+            flag: --mac
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Inject version number
+        run: npm run version:inject -- ${{ needs.prepare.outputs.tag }}
+
+      - name: Run the full verification suite
+        run: npm run verify
+
+      - name: Build application
+        run: npm run build
+
+      - name: Generate branding assets
+        run: npm run assets:icons
+
+      - name: Package and upload release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx --no-install electron-builder ${{ matrix.flag }} --publish always
+
+      - name: Archive artifacts for this run
+        uses: actions/upload-artifact@v4
+        with:
+          name: halcyon-${{ needs.prepare.outputs.version }}-${{ matrix.label }}
+          path: |
+            dist/*.exe
+            dist/*.msi
+            dist/*.AppImage
+            dist/*.tar.gz
+            dist/*.dmg
+            dist/*.zip
+            dist/latest*.yml
+          if-no-files-found: error
+          retention-days: 30
+
+  finalize:
+    name: Publish the GitHub Release
+    needs: [prepare, publish]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download changelog
+        uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+
+      - name: Publish release with generated notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        shell: bash
+        run: |
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release edit "$TAG" \
+              --title "Halcyon $VERSION" \
+              --notes-file RELEASE_NOTES.md \
+              --draft=false \
+              --latest
+          else
+            gh release create "$TAG" \
+              --title "Halcyon $VERSION" \
+              --notes-file RELEASE_NOTES.md \
+              --latest
+          fi
+          gh release view "$TAG" --json assets --jq '.assets[].name'

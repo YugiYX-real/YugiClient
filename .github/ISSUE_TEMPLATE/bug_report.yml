@@ -1,0 +1,63 @@
+name: Bug report
+description: Something in Halcyon does not work as expected.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. Logs make bugs far easier to fix:
+        open **Logs**, press **Export**, and attach the file below.
+
+  - type: input
+    id: version
+    attributes:
+      label: Halcyon version
+      description: Settings → About shows the version, build number and commit.
+      placeholder: 1.0.0 · build 42 · a1b2c3d
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Operating system
+      options:
+        - Windows 11
+        - Windows 10
+        - Linux
+        - macOS
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Create a Fabric 1.21.1 instance
+        2. Install Sodium from Discover
+        3. Press Play
+    validations:
+      required: true
+
+  - type: input
+    id: instance
+    attributes:
+      label: Instance setup
+      description: Minecraft version, loader, mod count, memory.
+      placeholder: 1.21.1 · Fabric 0.16.5 · 84 mods · 6 GB
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Paste the relevant lines or attach an exported log.
+      render: shell
