@@ -46,18 +46,22 @@ jobs:
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "Requested release ${TAG}"
 
-      - name: Create and push the tag
+      - name: Point the tag at the requested commit
         shell: bash
         run: |
           TAG="${{ steps.resolve.outputs.tag }}"
           if git rev-parse -q --verify "refs/tags/${TAG}" > /dev/null; then
-            echo "Tag ${TAG} already exists, reusing it."
-            exit 0
+            EXISTING="$(git rev-list -n 1 "refs/tags/${TAG}")"
+            if [ "${EXISTING}" = "${GITHUB_SHA}" ]; then
+              echo "Tag ${TAG} already points at this commit."
+            else
+              echo "Moving ${TAG} from ${EXISTING} to ${GITHUB_SHA}."
+            fi
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "${TAG}" -m "Halcyon ${TAG#v}"
-          git push origin "${TAG}"
+          git tag -f -a "${TAG}" -m "Halcyon ${TAG#v}" "${GITHUB_SHA}"
+          git push --force origin "refs/tags/${TAG}"
 
   release:
     name: Build and publish
