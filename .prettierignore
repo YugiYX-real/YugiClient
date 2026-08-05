@@ -1,10 +1,12 @@
 node_modules
 out
-release
 dist
+build
 coverage
-build/icon.png
-build/icon.ico
-build/icons
 package-lock.json
-CHANGELOG.md
+npm-shrinkwrap.json
+RELEASE_NOTES.md
+*.svg
+*.png
+*.ico
+*.icns
