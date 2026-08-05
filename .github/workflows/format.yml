@@ -17,6 +17,11 @@ jobs:
     name: Apply Prettier
     runs-on: ubuntu-latest
     steps:
+      - name: Use unix line endings for every checkout
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -27,25 +32,20 @@ jobs:
         with:
           node-version: 22
 
-      - name: Resolve the pinned Prettier version
-        id: prettier
-        shell: bash
-        run: |
-          VERSION="$(node -p "require('./package.json').devDependencies.prettier.replace(/^[^0-9]+/, '')")"
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "Formatting with Prettier ${VERSION}"
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
 
       - name: Apply Prettier
-        run: npx --yes prettier@${{ steps.prettier.outputs.version }} --write .
+        run: npm run format
 
       - name: Commit formatting
         run: |
-          if [ -z "$(git status --porcelain)" ]; then
-            echo "Every file already matches the Prettier configuration."
+          if git diff --quiet; then
+            echo "Every tracked file already matches the Prettier configuration."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
+          git add -u
           git commit -m "style: apply prettier formatting"
           git push

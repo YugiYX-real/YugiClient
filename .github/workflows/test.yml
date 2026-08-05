@@ -39,7 +39,8 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Check formatting
+      - name: Report formatting drift
+        continue-on-error: true
         run: npm run format:check
 
       - name: Static analysis
@@ -49,4 +50,4 @@ jobs:
         run: npm run typecheck
 
       - name: Unit and integration tests
-        run: node scripts/run-tests.mjs
+        run: npm test

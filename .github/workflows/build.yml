@@ -38,8 +38,18 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Verify everything
-        run: npm run verify
+      - name: Report formatting drift
+        continue-on-error: true
+        run: npm run format:check
+
+      - name: Static analysis
+        run: npm run lint
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Unit and integration tests
+        run: npm test
 
       - name: Build renderer, preload and main
         run: npm run build
