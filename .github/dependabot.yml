@@ -1,0 +1,38 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      types:
+        patterns:
+          - "@types/*"
+      tooling:
+        patterns:
+          - eslint
+          - "@eslint/*"
+          - typescript-eslint
+          - prettier
+          - typescript
+      build:
+        patterns:
+          - vite
+          - electron-vite
+          - "@vitejs/*"
+          - electron-builder
+    ignore:
+      - dependency-name: electron
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: ci
