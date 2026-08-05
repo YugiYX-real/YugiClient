@@ -182,15 +182,25 @@ export type IpcArgs<K extends IpcChannel> = Parameters<IpcContract[K]>
 
 export type IpcResult<K extends IpcChannel> = Awaited<ReturnType<IpcContract[K]>>
 
+export type InstancesChangedEvent = { readonly instanceId: string | null }
+
+export type AccountsChangedEvent = { readonly accounts: readonly Account[] }
+
+export type LogsAppendedEvent = {
+	readonly source: string
+	readonly instanceId: string | null
+	readonly lines: LogBundle["lines"]
+}
+
 export type IpcEventMap = {
 	"downloads:changed": DownloadSnapshot
-	"instances:changed": readonly InstanceSummary[]
-	"accounts:changed": readonly Account[]
+	"instances:changed": InstancesChangedEvent
+	"accounts:changed": AccountsChangedEvent
 	"settings:changed": Settings
 	"plugins:changed": readonly PluginInfo[]
 	"updates:changed": UpdateStatus
 	"launch:progress": LaunchProgress
-	"logs:appended": { readonly source: string; readonly lines: readonly LogBundle["lines"][number][] }
+	"logs:appended": LogsAppendedEvent
 	"toast": Toast
 }
 
