@@ -1,11 +1,11 @@
 import { execFile } from "node:child_process"
-import { chmod, mkdir, readdir, rm, stat } from "node:fs/promises"
+import { chmod, mkdir, readdir, rm } from "node:fs/promises"
 import { homedir, platform } from "node:os"
 import { join } from "node:path"
 import { promisify } from "node:util"
 import { isJavaCompatible, parseJavaVersionOutput, requiredJavaRuntime } from "@halcyon/core"
 import type { JavaRuntime } from "@halcyon/ipc"
-import { pathExists, unzipToDirectory } from "../infra/fs-extra.ts"
+import { directorySize, pathExists, unzipToDirectory } from "../infra/fs-extra.ts"
 import type { AppPaths } from "../infra/paths.ts"
 import type { HttpClient } from "../infra/http.ts"
 import type { Logger } from "../infra/logger.ts"
@@ -33,9 +33,19 @@ function candidateRoots(): readonly string[] {
 				join(home, ".jdks"),
 			]
 		case "darwin":
-			return ["/Library/Java/JavaVirtualMachines", join(home, "Library", "Java", "JavaVirtualMachines"), join(home, ".jdks")]
+			return [
+				"/Library/Java/JavaVirtualMachines",
+				join(home, "Library", "Java", "JavaVirtualMachines"),
+				join(home, ".jdks"),
+			]
 		default:
-			return ["/usr/lib/jvm", "/usr/java", "/opt/java", join(home, ".jdks"), join(home, ".sdkman", "candidates", "java")]
+			return [
+				"/usr/lib/jvm",
+				"/usr/java",
+				"/opt/java",
+				join(home, ".jdks"),
+				join(home, ".sdkman", "candidates", "java"),
+			]
 	}
 }
 
@@ -74,7 +84,7 @@ export class JavaService {
 				throw new Error("Could not read the Java version banner")
 			}
 			const versionMatch = /version "([^"]+)"/.exec(banner)
-			const vendorMatch = /^(\w[\w ]*?) (?:Runtime|OpenJDK)/m.exec(banner)
+			const vendorMatch = /^([A-Za-z][A-Za-z ]*?) (?:Runtime|OpenJDK)/m.exec(banner)
 			const runtime: JavaRuntime = {
 				path: executablePath,
 				major,
@@ -97,32 +107,6 @@ export class JavaService {
 				error: error instanceof Error ? error.message : String(error),
 			}
 		}
-	}
-
-	async managedRuntimes(): Promise<readonly JavaRuntime[]> {
-		const runtimes: JavaRuntime[] = []
-		let entries: string[] = []
-		try {
-			entries = (await readdir(this.paths.java, { withFileTypes: true }))
-				.filter((entry) => entry.isDirectory())
-				.map((entry) => entry.name)
-		} catch {
-			return runtimes
-		}
-
-		for (const entry of entries) {
-			const executable = await this.findExecutable(join(this.paths.java, entry))
-			if (executable !== undefined) {
-				runTimePush: {
-					const runtime = await this.validate(executable, true)
-					if (runtime.valid) {
-						runtimes.push(runtime)
-					}
-					break runTimePush
-				}
-			}
-		}
-		return runtimes
 	}
 
 	private async findExecutable(root: string): Promise<string | undefined> {
@@ -148,6 +132,31 @@ export class JavaService {
 			return undefined
 		}
 		return undefined
+	}
+
+	async managedRuntimes(): Promise<readonly JavaRuntime[]> {
+		const runtimes: JavaRuntime[] = []
+		let directories: string[] = []
+		try {
+			directories = (await readdir(this.paths.java, { withFileTypes: true }))
+				.filter((entry) => entry.isDirectory())
+				.map((entry) => entry.name)
+		} catch {
+			return runtimes
+		}
+
+		for (const directory of directories) {
+			const executable = await this.findExecutable(join(this.paths.java, directory))
+			if (executable === undefined) {
+				continue
+			}
+			const runtime = await this.validate(executable, true)
+			if (runtime.valid) {
+				runtimes.push(runtime)
+			}
+		}
+
+		return runtimes
 	}
 
 	async detect(): Promise<readonly JavaRuntime[]> {
@@ -269,11 +278,6 @@ export class JavaService {
 	}
 
 	async sizeOnDisk(): Promise<number> {
-		try {
-			const info = await stat(this.paths.java)
-			return info.size
-		} catch {
-			return 0
-		}
+		return directorySize(this.paths.java)
 	}
 }
