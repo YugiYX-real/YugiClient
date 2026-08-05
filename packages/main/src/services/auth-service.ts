@@ -403,9 +403,7 @@ export class AuthService {
 
 	async remove(accountId: string): Promise<readonly Account[]> {
 		const { accounts } = await this.store.read()
-		const remaining = accounts
-			.filter((account) => account.id !== accountId)
-			.map((account, index) => ({ ...account }))
+		const remaining = accounts.filter((account) => account.id !== accountId)
 
 		if (remaining.length > 0 && !remaining.some((account) => account.selected)) {
 			const first = remaining[0]
@@ -414,6 +412,7 @@ export class AuthService {
 			}
 		}
 
+		this.logger.info(`Removed the account ${accountId}`)
 		return this.persist(remaining)
 	}
 
