@@ -27,8 +27,16 @@ jobs:
         with:
           node-version: 22
 
+      - name: Resolve the pinned Prettier version
+        id: prettier
+        shell: bash
+        run: |
+          VERSION="$(node -p "require('./package.json').devDependencies.prettier.replace(/^[^0-9]+/, '')")"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Formatting with Prettier ${VERSION}"
+
       - name: Apply Prettier
-        run: npx --yes prettier@3.3.3 --write .
+        run: npx --yes prettier@${{ steps.prettier.outputs.version }} --write .
 
       - name: Commit formatting
         run: |
