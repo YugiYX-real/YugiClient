@@ -132,7 +132,9 @@ export class PluginService {
 				this.logger.info(`[${manifest.id}] ${message}`)
 			},
 			on: (event, listener) => {
-				const dispose = this.events.on(event, listener as (payload: never) => void)
+				const dispose = this.events.on(event, (payload) => {
+					listener(payload)
+				})
 				record.disposers.push(dispose)
 			},
 			registerCard: (card) => {
