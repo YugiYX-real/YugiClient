@@ -1,203 +1,163 @@
 <div align="center">
 
-<img src="assets/branding/logo-wordmark.svg" alt="Halcyon Launcher" width="420">
+<img src="assets/branding/logo.svg" alt="Halcyon" width="120" />
 
-**A premium, open source Minecraft launcher.**
+# Halcyon Launcher
 
-Launch beautifully.
+**Launch beautifully.**
 
+A premium, open source Minecraft launcher for Vanilla, Fabric, Forge, NeoForge and Quilt,
+built on Electron, React and a fully typed process boundary.
+
+[![Test](https://github.com/jjbkl/YugiClient/actions/workflows/test.yml/badge.svg)](https://github.com/jjbkl/YugiClient/actions/workflows/test.yml)
 [![Build](https://github.com/jjbkl/YugiClient/actions/workflows/build.yml/badge.svg)](https://github.com/jjbkl/YugiClient/actions/workflows/build.yml)
-[![Tests](https://github.com/jjbkl/YugiClient/actions/workflows/test.yml/badge.svg)](https://github.com/jjbkl/YugiClient/actions/workflows/test.yml)
 [![Release](https://github.com/jjbkl/YugiClient/actions/workflows/release.yml/badge.svg)](https://github.com/jjbkl/YugiClient/actions/workflows/release.yml)
-[![License](https://img.shields.io/badge/license-MIT-7C5CFF)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-7C5CFF.svg)](LICENSE)
 
 </div>
 
 ---
 
-Halcyon is a desktop Minecraft launcher built around three ideas that most launchers get wrong:
+## Why Halcyon
 
-1. **The domain logic is pure.** Version resolution, argument building, dependency solving, crash analysis and download scheduling live in `@halcyon/core`, a package with zero runtime dependencies that never touches the network or the filesystem. It is fully unit tested and can be reasoned about in isolation.
-2. **Everything the user waits for is observable.** Every download reports bytes, speed, ETA, retries and failures through one queue, and every launch reports its full, redacted command line.
-3. **Failures explain themselves.** A crash is not a wall of stack traces; Halcyon reads the log, names the mod or driver at fault, and tells you what to do next.
+Most launchers make you choose between a beautiful interface and real control over your
+installation. Halcyon refuses the trade-off: an aurora-lit interface with an honest,
+tested engine underneath, no telemetry you did not ask for, and no account required to
+play offline.
 
-## Contents
+- **Fast** — parallel, resumable downloads with a concurrency-limited queue, a
+  content-addressed asset store, and launch paths that verify only what actually changed.
+- **Stable** — the domain layer is pure TypeScript with 104 assertions in a
+  zero-dependency test suite, and every IPC channel is a compile-time contract.
+- **Yours** — unlimited instances, per-instance Java, JVM arguments, memory, window
+  settings and environment variables. Export any instance as a single file.
 
-- [Feature overview](#feature-overview)
-- [Architecture](#architecture)
-- [Project layout](#project-layout)
-- [Requirements](#requirements)
-- [Building from source](#building-from-source)
-- [Testing](#testing)
-- [Continuous integration and releases](#continuous-integration-and-releases)
-- [Plugin API](#plugin-api)
-- [Design rationale](#design-rationale)
-- [Known limitations](#known-limitations)
-- [License](#license)
-
-## Feature overview
-
-### Minecraft support
-
-| Area | Support |
-| --- | --- |
-| Loaders | Vanilla, Fabric, Quilt, Forge, NeoForge |
-| Versions | Every released version in the official manifest, including snapshots, pre-releases and release candidates |
-| Java | Automatic detection, managed runtime downloads, per-instance override, validation before launch |
-| Assets | Shared asset and library store, legacy virtual assets, checksum verification, repair |
+## Features
 
 ### Instances
 
-Unlimited instances, each with its own name, icon, background, version, loader, Java runtime, memory allocation, JVM arguments, window size, environment variables and Rich Presence toggle. Instances can be duplicated, renamed, favourited, exported to a portable archive, imported back, backed up and restored. Worlds, saves, screenshots, resource packs, shader packs, mods and logs are all browsable from inside the instance.
-
-### Accounts
-
-Microsoft OAuth device-code and authorisation-code flows, Xbox Live and XSTS token exchange, silent refresh, offline accounts for LAN play, unlimited stored accounts with nicknames and favourites, one-click switching, and encrypted token storage using the operating system keychain.
+- Unlimited instances with custom name, icon, background, group and notes
+- Vanilla, Fabric, Forge, NeoForge and Quilt on every released Minecraft version
+- Per-instance Java executable, memory, JVM arguments, resolution, fullscreen and
+  environment variables
+- Duplicate, rename, favourite, export, import, and import your official launcher profiles
+- Repair and verify installations against the upstream manifest
+- Backups with notes, one-click restore, and automatic snapshots before risky changes
+- Version changer with compatibility assessment, mod warnings, loader migration and
+  Java requirement diffs
 
 ### Content
 
-First-class Modrinth integration for mods, shaders, resource packs and datapacks: search with loader and version filters, browse categories, read descriptions and changelogs, inspect dependencies, install with one click, and let Halcyon resolve required dependencies automatically. Local management covers enable, disable, bulk operations, drag and drop installation, update checks, duplicate detection and missing dependency detection.
+- Full Modrinth integration for mods, shaders, resource packs and datapacks
+- Search, categories, screenshots, descriptions, changelogs and dependency graphs
+- One-click install with automatic dependency resolution
+- Update checker with bulk apply, plus conflict, duplicate and missing-dependency detection
+- Drag and drop jar and zip installation, bulk enable, disable and delete
 
-### Quality of life
+### Accounts and skins
 
-A dashboard with quick launch, recently played, play statistics and featured content. A command palette bound to `Ctrl/Cmd + K`. A log viewer with filtering, search, error highlighting and crash explanations. A theming engine with dark, light and AMOLED bases, custom accent colours, blur, transparency, corner radius and UI scaling. Silent background updates with release notes.
+- Microsoft sign-in through the OAuth device code flow, refresh tokens encrypted at rest
+- Unlimited Microsoft and offline accounts, nicknames, favourites, one-click switching
+- Import and export account lists
+- Skin wardrobe with upload, history, favourites, classic and slim models, and a live
+  3D preview rendered without a WebGL dependency
 
-## Architecture
+### Java, downloads and diagnostics
 
-Halcyon is an Electron application, but the Electron parts are deliberately thin. Dependencies point inwards: the renderer knows about the IPC contract, the main process knows about the contract and the domain, and the domain knows about nothing.
+- Automatic Java detection, managed Temurin runtimes for 8, 17 and 21, manual selection
+  and validation
+- Download manager with progress, speed, ETA, pause, resume, retry and cancel
+- Log viewer with level filters, search, follow mode, copy and export
+- Crash analysis that recognises eleven signatures and explains them in plain language
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│ renderer  React + Vite                                       │
-│ pages, components, stores, theming                           │
-└───────────────────────────┬──────────────────────────────────┘
-                            │ window.halcyon (typed, contextBridge)
-┌───────────────────────────┴──────────────────────────────────┐
-│ preload   contextBridge surface generated from the contract   │
-└───────────────────────────┬──────────────────────────────────┘
-                            │ @halcyon/ipc  channel + payload types
-┌───────────────────────────┴──────────────────────────────────┐
-│ main      DI container, IPC handlers, services                │
-│ http, downloads, mojang, loaders, modrinth, auth, java,       │
-│ instances, mods, skins, backups, launch, updates, plugins     │
-└───────────────────────────┬──────────────────────────────────┘
-                            │ ports (interfaces only)
-┌───────────────────────────┴──────────────────────────────────┐
-│ core      pure domain, zero dependencies, fully unit tested   │
-│ rules, maven, libraries, inheritance, version ordering,       │
-│ java requirements, launch arguments, dependency resolution,    │
-│ compatibility, crash analysis, progress, download queue        │
-└──────────────────────────────────────────────────────────────┘
-```
+### Interface
 
-Services never construct their own collaborators. They receive interfaces through a small typed container, which is what makes the domain testable without a network, a filesystem or an Electron process.
+- Original design system: dark, light and AMOLED themes, six accent presets or any custom
+  colour, adjustable corner radius, transparency, blur and UI scale
+- Command palette, keyboard shortcuts, context menus, drag and drop everywhere
+- Dashboard with news, recently played, favourites, featured content, play statistics and
+  plugin cards
+- Eight languages, motion controls down to fully reduced animation
 
-## Project layout
+### Platform
 
-```
-halcyon/
-├── .github/workflows/        build.yml, test.yml, release.yml
-├── assets/branding/          logo, icon, splash, wordmark (SVG sources)
-├── docs/                     architecture, build, plugin API, IPC API
-├── examples/plugins/         working example plugins
-├── packages/
-│   ├── core/                 pure domain logic and its unit tests
-│   ├── ipc/                  shared IPC channel and payload contract
-│   ├── main/                 Electron main process, services, container
-│   ├── preload/              contextBridge bridge
-│   ├── plugin-sdk/           public plugin API types and helpers
-│   └── renderer/             React application
-├── scripts/                  test runner, icon rasteriser, version injection
-├── electron-builder.yml      packaging targets for Windows, Linux, macOS
-└── package.json              npm workspaces root
-```
+- Automatic updates with sha512 verification, release notes and rollback
+- Plugin API with an event system, dashboard contributions and a typed SDK
+- Windows installer and portable exe, Linux AppImage and tar.gz, macOS dmg and zip
 
-## Requirements
+## Install
 
-- Node.js 20.11 or newer (Node 22 LTS recommended)
-- npm 10 or newer
-- Git
-- Platform toolchain only if you package for that platform: Windows for NSIS installers, macOS for `.dmg`
+Grab the latest build from [Releases](https://github.com/jjbkl/YugiClient/releases):
 
-## Building from source
+| Platform | File |
+| --- | --- |
+| Windows | `Halcyon-<version>-setup.exe` or `Halcyon-<version>-portable.exe` |
+| Linux | `Halcyon-<version>-x64.AppImage` or `Halcyon-<version>-x64.tar.gz` |
+| macOS | `Halcyon-<version>-x64.dmg` |
+
+Builds are currently unsigned, so Windows SmartScreen and macOS Gatekeeper will ask for
+confirmation on first launch.
+
+## Develop
 
 ```bash
 git clone https://github.com/jjbkl/YugiClient.git
 cd YugiClient
-npm ci
-npm run build          # compile core, ipc, main, preload and the renderer
-npm start              # launch the app from source
-npm run package        # produce installers for the current platform
+npm install
+npm run dev
 ```
 
-See [docs/build.md](docs/build.md) for platform notes, code signing and reproducible builds.
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Hot-reloading development build |
+| `npm run verify` | Formatting, lint, type check and tests |
+| `npm test` | Zero-dependency test suite |
+| `npm run build` | Bundle main, preload and renderer |
+| `npm run package` | Installers for the current platform |
 
-## Testing
+Full instructions, environment variables and troubleshooting live in
+[`docs/build.md`](docs/build.md).
 
-```bash
-npm test               # unit and integration tests
-npm run typecheck      # project-wide TypeScript check
-npm run lint           # static analysis
-npm run format:check   # formatting verification
+## Architecture
+
+```
+packages/core        pure domain logic, no Electron, 104 assertions
+packages/ipc         the typed contract shared across every boundary
+packages/preload     context-isolated bridge with a channel allowlist
+packages/main        twenty services behind a dependency injection container
+packages/renderer    React 18 interface, design system, ten screens
+packages/plugin-sdk  public types for third-party plugins
 ```
 
-The domain tests run on the Node test runner with no test framework dependency, so `npm test` works on a clean clone with nothing installed but the workspace itself. Integration tests exercise the service layer against in-memory ports and recorded fixtures instead of live APIs, which keeps CI deterministic.
+The renderer never touches Node. Preload exposes exactly two objects and rejects unknown
+channels. The main process registers an exhaustive handler map, so adding a channel
+without a handler fails the type check rather than a user's click.
 
-## Continuous integration and releases
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — packages, services, flows, data layout
+- [`docs/api.md`](docs/api.md) — every IPC channel and event
+- [`docs/plugin-api.md`](docs/plugin-api.md) — writing plugins
+- [`docs/build.md`](docs/build.md) — building, packaging and releasing
 
-| Workflow | Trigger | What it does |
-| --- | --- | --- |
-| `test.yml` | push, pull request | Formatting, lint, typecheck, unit and integration tests on Linux, Windows and macOS |
-| `build.yml` | push to `main`, pull request | Full build plus unsigned release binaries for every platform, uploaded as artifacts |
-| `release.yml` | tag `v*` or a published release | Injects the version, builds and packages every target, generates a changelog, uploads assets and the auto-update manifest |
+## Plugins
 
-Release assets: portable Windows `.exe`, Windows NSIS installer, Linux AppImage, Linux `tar.gz`, macOS `.dmg` and `.zip`, plus `latest.yml`, `latest-linux.yml` and `latest-mac.yml` for `electron-updater`.
+Drop a folder with a `halcyon.plugin.json` and an ES module into
+`<userData>/plugins`, then press **Reload plugins**. Plugins subscribe to launch,
+instance, download and settings events, contribute dashboard cards and raise
+notifications.
 
-Versioning follows semantic versioning. `scripts/inject-version.mjs` writes the tag, commit and build number into the application at build time, so the About panel always matches the artifact it came from.
+Two working examples ship in [`examples/plugins`](examples/plugins), and
+`@halcyon/plugin-sdk` provides the types.
 
-## Plugin API
+## Contributing
 
-Plugins are plain ES modules that export a factory. They receive a scoped, typed context and can subscribe to launcher events, add dashboard cards, register commands in the palette and read instance metadata.
-
-```ts
-import { definePlugin } from "@halcyon/plugin-sdk"
-
-export default definePlugin({
-	id: "playtime-tracker",
-	name: "Playtime Tracker",
-	version: "1.0.0",
-	setup(context) {
-		context.events.on("instance:exited", ({ instanceId, durationMs }) => {
-			context.logger.info(`${instanceId} ran for ${Math.round(durationMs / 60000)} minutes`)
-		})
-	},
-})
-```
-
-Full reference in [docs/plugin-api.md](docs/plugin-api.md); runnable examples in [examples/plugins](examples/plugins).
-
-## Design rationale
-
-**Why Electron rather than a native toolkit.** The UI is the product, and the UI here is dense, animated and constantly evolving. Electron trades memory for iteration speed and a single rendering model on all three platforms. The cost is mitigated by keeping the main process lean and doing all heavy work in the domain layer.
-
-**Why a pure core.** Launcher bugs are almost always logic bugs: a wrong classpath separator, a native classifier that ignores architecture, a snapshot that sorts before a release, a dependency graph with a cycle. None of those need a network to reproduce, so none of them should need one to test. The domain package has no imports outside Node built-ins.
-
-**Why one download queue.** Parallel downloads, retries with exponential backoff, pause and resume, ETA and speed all belong to the same problem. Solving it once and injecting the transport keeps every feature that downloads something consistent.
-
-**Why crash analysis is a data table.** Signatures are declarative, each with a title, severity, explanation and remedies. Adding a new diagnosis is one entry and one test, not a new branch in a growing conditional.
-
-## Known limitations
-
-Honesty is more useful than marketing, so here is the current state:
-
-- The domain package is verified by 104 unit tests that run in this repository today. The service layer that talks to Mojang, Modrinth, Microsoft and Adoptium is written against those APIs but was authored in an environment without outbound network access, so the first real end-to-end run should be treated as a smoke test.
-- Branding assets ship as SVG sources. `npm run assets:icons` rasterises them to `.png`, `.ico` and `.icns` during packaging; CI does this before `electron-builder` runs.
-- Code signing is not configured. Unsigned Windows builds show a SmartScreen prompt and unsigned macOS builds need `xattr -d com.apple.quarantine`. Add certificates as repository secrets to enable it.
-- Forge and NeoForge installation uses the installer profile JSON. Very old Forge versions that require running the graphical installer are imported rather than installed.
-- The 3D skin preview renders the player model, cape and elytra; it is not a full model editor.
+Issues and pull requests are welcome. Run `npm run verify` before opening a pull request;
+CI runs the same checks on Ubuntu, Windows and macOS. Please include screenshots for
+interface changes.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+[MIT](LICENSE).
 
-Minecraft is a trademark of Mojang Synergies AB. Halcyon is an unofficial project and is not affiliated with or endorsed by Mojang or Microsoft.
+Halcyon is an independent project. It is not affiliated with, endorsed by or sponsored by
+Mojang Studios or Microsoft. Minecraft is a trademark of Mojang Studios. Modrinth is a
+trademark of Rinth, Inc.; Halcyon uses its public API as a client.
