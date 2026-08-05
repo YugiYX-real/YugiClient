@@ -10,6 +10,14 @@ import type { Logger } from "../infra/logger.ts"
 const requireCjs = createRequire(import.meta.url)
 const { autoUpdater } = requireCjs("electron-updater") as { autoUpdater: AppUpdater }
 
+const UNREADABLE_FEED = /releases\.atom|authentication token is correct|404/i
+const OFFLINE = /ENOTFOUND|EAI_AGAIN|ETIMEDOUT|ECONNRESET|ECONNREFUSED|net::ERR/i
+
+const UNREADABLE_FEED_MESSAGE =
+	"Update checks are unavailable because the release feed cannot be read. " +
+	"Publish the repository or install new versions manually."
+const OFFLINE_MESSAGE = "Update checks are unavailable because the launcher is offline."
+
 export type UpdateHistoryState = { installedVersions: string[] }
 
 export const DEFAULT_UPDATE_HISTORY: UpdateHistoryState = { installedVersions: [] }
@@ -29,6 +37,17 @@ function releaseNotesOf(info: UpdateInfo): string | null {
 		return joined === "" ? null : joined
 	}
 	return null
+}
+
+function explain(error: unknown): string {
+	const message = error instanceof Error ? error.message : String(error)
+	if (OFFLINE.test(message)) {
+		return OFFLINE_MESSAGE
+	}
+	if (UNREADABLE_FEED.test(message)) {
+		return UNREADABLE_FEED_MESSAGE
+	}
+	return message
 }
 
 export class UpdateService {
@@ -95,7 +114,7 @@ export class UpdateService {
 		})
 		autoUpdater.on("error", (error: Error) => {
 			this.logger.warn("The updater reported a problem", error)
-			this.patch({ state: "error", error: error.message })
+			this.patch({ state: "error", error: explain(error) })
 		})
 
 		await this.history.update((current) => ({
@@ -126,9 +145,8 @@ export class UpdateService {
 		try {
 			await autoUpdater.checkForUpdates()
 		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error)
 			this.logger.warn("Could not check for updates", error)
-			this.patch({ state: "error", error: message })
+			this.patch({ state: "error", error: explain(error) })
 		}
 		return this.state
 	}
@@ -138,9 +156,8 @@ export class UpdateService {
 			this.patch({ state: "downloading", percent: 0, error: null })
 			await autoUpdater.downloadUpdate()
 		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error)
 			this.logger.warn("Could not download the update", error)
-			this.patch({ state: "error", error: message })
+			this.patch({ state: "error", error: explain(error) })
 		}
 		return this.state
 	}

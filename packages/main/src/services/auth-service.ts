@@ -307,6 +307,10 @@ export class AuthService {
 		tokens: TokenResponse,
 		authFlow: AuthFlow,
 	): Promise<Account> {
+		// Xbox Live expects t= in front of a login.live.com token and d= in front of an
+		// Azure token. The wrong preamble is answered with 401 Unauthorized.
+		const preamble = authFlow === "live" ? "t=" : "d="
+
 		const xbl = await this.http.json<XboxResponse>(XBL_URL, {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -314,8 +318,7 @@ export class AuthService {
 				Properties: {
 					AuthMethod: "RPS",
 					SiteName: "user.auth.xboxlive.com",
-					RpsTicket:
-						authFlow === "live" ? tokens.access_token : `d=${tokens.access_token}`,
+					RpsTicket: preamble + tokens.access_token,
 				},
 				RelyingParty: "http://auth.xboxlive.com",
 				TokenType: "JWT",
