@@ -314,7 +314,8 @@ export class AuthService {
 				Properties: {
 					AuthMethod: "RPS",
 					SiteName: "user.auth.xboxlive.com",
-					RpsTicket: authFlow === "live" ? tokens.access_token : `d=${tokens.access_token}`,
+					RpsTicket:
+						authFlow === "live" ? tokens.access_token : `d=${tokens.access_token}`,
 				},
 				RelyingParty: "http://auth.xboxlive.com",
 				TokenType: "JWT",
