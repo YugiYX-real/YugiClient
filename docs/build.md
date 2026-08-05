@@ -10,8 +10,8 @@
 
 Platform extras:
 
-- **Windows** — nothing beyond Node; NSIS is bundled with electron-builder.
-- **Linux** — `libfuse2` is needed to *run* an AppImage (not to build one).
+- **Windows** — nothing beyond Node; NSIS ships with electron-builder.
+- **Linux** — `libfuse2` is needed to *run* an AppImage, not to build one.
 - **macOS** — Xcode command line tools for code signing; unsigned builds work
   without them.
 
@@ -37,9 +37,9 @@ restart on change, the renderer hot-reloads.
 | `npm test` | Zero-dependency test suite via `scripts/run-tests.mjs` |
 | `npm run typecheck` | `tsc --noEmit` across every package |
 | `npm run lint` | ESLint with type-aware rules |
-| `npm run format:check` | Prettier verification (CI uses this) |
+| `npm run format:check` | Prettier verification, exactly what CI runs |
 | `npm run format` | Prettier write |
-| `npm run verify` | format:check + lint + typecheck + test, exactly what CI runs |
+| `npm run verify` | format:check, lint, typecheck and test in one go |
 | `npm run assets:icons` | Regenerate icons and the splash PNG from the SVG sources |
 | `npm run version:inject` | Write a tag version into `package.json` |
 | `npm run package` | Installers for the current platform |
@@ -85,8 +85,8 @@ against semantic versioning and rewrites `package.json`.
 
 1. Azure Portal → **App registrations** → **New registration**.
 2. Supported account types: **Personal Microsoft accounts only**.
-3. Authentication → **Allow public client flows: Yes** (Halcyon uses the OAuth
-   device code flow, so no redirect URI or client secret is required).
+3. Authentication → **Allow public client flows: Yes**. Halcyon uses the OAuth
+   device code flow, so no redirect URI and no client secret are required.
 4. Copy the Application (client) ID into `HALCYON_MSA_CLIENT_ID`.
 
 Halcyon stores only the refresh token, encrypted at rest with Electron's
@@ -110,6 +110,6 @@ and publishes it.
 | --- | --- |
 | `npm run build` cannot find the renderer entry | Run from the repository root; the renderer root is `packages/renderer` |
 | Electron fails to start on Linux | Install `libnss3`, `libatk1.0-0`, `libgtk-3-0` |
-| AppImage will not run | Install `libfuse2` |
+| An AppImage will not run | Install `libfuse2` |
 | Microsoft sign-in returns 403 | Your Azure app must allow public client flows and personal accounts |
 | Java download fails behind a proxy | Set `HTTPS_PROXY`; the HTTP layer honours it |

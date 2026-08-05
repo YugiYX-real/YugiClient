@@ -33,7 +33,7 @@ plugins/
 | Field | Required | Notes |
 | --- | --- | --- |
 | `id` | yes | Unique, stable, used as the storage key |
-| `name` | yes | Shown in the Plugins page |
+| `name` | yes | Shown on the Plugins page |
 | `version` | yes | Semantic version string |
 | `description` | no | One sentence |
 | `author` | no | Free text |
@@ -71,7 +71,7 @@ export default {
 ```
 
 Both hooks may be async. Errors thrown during activation are caught, surfaced on
-the plugin card in the Plugins page, and do not affect the launcher.
+the plugin card on the Plugins page, and never affect the launcher.
 
 ## The context
 
@@ -101,12 +101,12 @@ type PluginContext = {
 
 | Event | Payload |
 | --- | --- |
-| `launch:progress` | `{ instanceId, state, detail, fraction, exitCode }` — states are `preparing`, `resolving`, `downloading`, `installing`, `launching`, `running`, `exited`, `error` |
+| `launch:progress` | `{ instanceId, state, detail, fraction, exitCode }`. States are `preparing`, `resolving`, `downloading`, `installing`, `launching`, `running`, `exited`, `error` |
 | `instances:changed` | `{ instanceId: string \| null }` |
 | `downloads:changed` | The full download snapshot: items, bytes, speed, ETA, failures |
 | `settings:changed` | The updated settings object |
 
-Events are the same ones the interface consumes, so a plugin always sees exactly
+These are the same events the interface consumes, so a plugin always sees exactly
 what the user sees.
 
 ## Type safety
@@ -130,7 +130,7 @@ also exports `PLUGIN_API_VERSION`, `PLUGIN_MANIFEST_FILE`, `PluginManifest`,
 
 ## Lifecycle guarantees
 
-1. On startup, and on **Reload plugins**, every plugin is deactivated first.
+1. On startup, and on **Reload plugins**, every loaded plugin is deactivated first.
 2. Manifests are read, API versions checked, entry points verified to exist.
 3. Enabled plugins are imported and activated in directory order.
 4. Disabling a plugin persists its id and triggers a reload cycle.
@@ -139,7 +139,7 @@ also exports `PLUGIN_API_VERSION`, `PLUGIN_MANIFEST_FILE`, `PluginManifest`,
 
 ## Boundaries
 
-Plugins have main-process privileges: keep them to code you trust. They cannot
+Plugins have main-process privileges, so install only code you trust. They cannot
 reach into the renderer directly — dashboard cards and toasts are the supported
 way to reach the user. Anything more invasive should be proposed as an API
 addition so it can be reviewed and versioned.

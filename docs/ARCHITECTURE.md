@@ -1,6 +1,6 @@
 # Architecture
 
-Halcyon is an Electron application split into five packages with strictly one-way
+Halcyon is an Electron application split into six packages with strictly one-way
 dependencies. Nothing in the renderer can reach Node APIs, and nothing in the
 main process imports React.
 
@@ -19,7 +19,7 @@ Dependency direction:
 core  <-  main  ->  ipc  <-  preload  <-  renderer
                      ^                       |
                      +-----------------------+
-              (renderer only imports types, never runtime code)
+              (renderer imports types only, never runtime code)
 ```
 
 ## packages/core
@@ -82,10 +82,10 @@ Unknown channels throw before crossing the boundary.
 | File | Responsibility |
 | --- | --- |
 | `paths.ts` | Every directory Halcyon owns, derived once from `app.getPath` |
-| `logger.ts` | Levelled file + console logger with rotation |
+| `logger.ts` | Levelled file and console logger |
 | `events.ts` | Typed event bus that fans out to windows and plugins |
 | `json-store.ts` | Atomic read/update/write JSON persistence with defaults |
-| `http.ts` | Fetch wrapper: retries on 408/425/429/5xx, exponential backoff, ETag caching, sha1/sha512 verification |
+| `http.ts` | Fetch wrapper: retries on 408/425/429/5xx, exponential backoff, conditional requests, hash verification |
 | `fs-extra.ts` | `pathExists`, recursive copy, safe remove, directory size |
 | `platform.ts` | OS and architecture normalisation for Mojang rule evaluation |
 
@@ -102,7 +102,7 @@ Notable flows:
 
 - **Launch** (`launch-service.ts`): resolve version → assemble classpath and natives
   → verify or download assets → pick Java → build argument vectors → spawn → stream
-  stdout/stderr into the instance log → emit `launch:progress` → record playtime.
+  stdout and stderr into the instance log → emit `launch:progress` → record playtime.
 - **Version change** (`version-change-service.ts`): assess direction, warn about
   loader-family migrations, list incompatible mods, optionally snapshot a backup,
   then install the target version and rewrite the instance config.
@@ -113,9 +113,9 @@ Notable flows:
 ### Composition (`src/container.ts`)
 
 `createContainer()` is the only place where services are constructed. It wires
-dependencies in topological order, returns a frozen object, and exposes
-`dispose()` so every watcher, child process and interval is released on quit.
-Handlers receive the container; they never instantiate anything themselves.
+dependencies in topological order and exposes `dispose()` so every watcher, child
+process and interval is released on quit. Handlers receive the container; they
+never instantiate anything themselves.
 
 ## packages/renderer
 
@@ -123,23 +123,25 @@ Handlers receive the container; they never instantiate anything themselves.
   imports `invoke`, `subscribe`, `openExternal`, `openPath`, `filePathOf`.
 - `lib/hooks.ts` — `useAsync`, `useIpcEvent`, `useSettings`, `useToasts`,
   `useDebounced`, `useKeyboardShortcut`, `useSelection`.
-- `app/theme.ts` — writes CSS custom properties and `data-theme`/`data-animations`
-  attributes; the entire theming engine is token substitution, no re-render.
+- `app/theme.ts` — writes CSS custom properties and `data-theme` /
+  `data-animations` attributes; the theming engine is token substitution, so
+  switching themes never re-renders the tree.
 - `styles/global.css` — one token-driven stylesheet: dark, light and AMOLED themes,
   accent derivation, blur, radius, transparency and UI scale all read from tokens.
-- `components/primitives.tsx` — 24 primitives (buttons, cards, modals, tabs,
-  toggles, drop zones, context menus, toasts, skeletons, empty states).
+- `components/primitives.tsx` — the component library: buttons, cards, modals,
+  tabs, toggles, sliders, drop zones, context menus, toasts, skeletons, empty
+  states.
 - `pages/*.tsx` — one page per route, each owning its data fetching through
   `useAsync` and refreshing from IPC events rather than polling.
 
-Routing is a small in-memory reducer over `RouteId` — no router dependency, no URL
-state to keep in sync with a desktop window.
+Routing is a small in-memory reducer over `RouteId` — no router dependency and no
+URL state to keep in sync with a desktop window.
 
 ## Data on disk
 
 ```
 <userData>/
-  halcyon.log                 rotating launcher log
+  halcyon.log                 launcher log
   settings.json               launcher preferences
   accounts.json               refresh tokens, encrypted at rest
   skins.json                  wardrobe index
@@ -153,7 +155,7 @@ state to keep in sync with a desktop window.
   libraries/                  Maven layout
   runtimes/<major>/           managed Temurin runtimes
   backups/<instance>/         zip snapshots
-  plugins/<id>/               halcyon.plugin.json + entry point
+  plugins/<id>/               halcyon.plugin.json and entry point
 ```
 
 Instances are self-contained: exporting one is a zip of its directory, and
@@ -165,7 +167,7 @@ importing validates the manifest before adopting it.
   retry and a shared throughput estimator.
 - Assets are content-addressed, so switching versions re-uses everything already
   on disk; verification hashes only what the manifest claims.
-- The version manifest is cached for six hours and revalidated with ETags.
+- The version manifest is cached for six hours and revalidated conditionally.
 - Modrinth responses are cached per query for the session.
 - The renderer never polls: every list refreshes from a targeted IPC event.
 

@@ -189,4 +189,4 @@ path when one exists.
 
 Handlers reject with `Error`. The renderer surfaces the message through the toast
 system and, where a page owns the failure, inline via `useAsync().error`. Unknown
-channels are rejected in preload before reaching the main process.
+channels are rejected in preload before they reach the main process.
