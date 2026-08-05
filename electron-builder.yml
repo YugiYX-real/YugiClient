@@ -1,0 +1,95 @@
+appId: dev.yugi.halcyon
+productName: Halcyon
+copyright: Copyright (c) 2026 jjbkl
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - out/**
+  - package.json
+  - "!**/*.map"
+  - "!node_modules/**/{test,tests,__tests__,docs,example,examples}/**"
+
+asar: true
+npmRebuild: false
+buildDependenciesFromSource: false
+
+publish:
+  provider: github
+  owner: jjbkl
+  repo: YugiClient
+  releaseType: release
+
+win:
+  icon: build/icon.ico
+  artifactName: ${productName}-${version}-${arch}.${ext}
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+    - target: zip
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Halcyon
+  uninstallDisplayName: Halcyon Launcher
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  artifactName: ${productName}-${version}-setup.${ext}
+  deleteAppDataOnUninstall: false
+
+portable:
+  artifactName: ${productName}-${version}-portable.${ext}
+  requestExecutionLevel: user
+
+linux:
+  icon: build/icon.png
+  category: Game
+  synopsis: A premium open source Minecraft launcher
+  description: Halcyon is a modern Minecraft launcher with instance management, Modrinth integration and crash diagnostics.
+  desktop:
+    StartupWMClass: Halcyon
+  artifactName: ${productName}-${version}-${arch}.${ext}
+  target:
+    - target: AppImage
+      arch:
+        - x64
+    - target: tar.gz
+      arch:
+        - x64
+
+mac:
+  icon: build/icon.png
+  category: public.app-category.games
+  artifactName: ${productName}-${version}-${arch}.${ext}
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+    - target: zip
+      arch:
+        - x64
+        - arm64
+
+dmg:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+  window:
+    width: 540
+    height: 380

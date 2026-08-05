@@ -1,0 +1,10 @@
+node_modules
+out
+release
+dist
+coverage
+build/icon.png
+build/icon.ico
+build/icons
+package-lock.json
+CHANGELOG.md
