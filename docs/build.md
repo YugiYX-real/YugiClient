@@ -37,14 +37,21 @@ restart on change, the renderer hot-reloads.
 | `npm test`                                | Zero-dependency test suite via `scripts/run-tests.mjs`       |
 | `npm run typecheck`                       | `tsc --noEmit` across every package                          |
 | `npm run lint`                            | ESLint with type-aware rules                                 |
-| `npm run format:check`                    | Prettier verification, exactly what CI runs                  |
 | `npm run format`                          | Prettier write                                               |
-| `npm run verify`                          | format:check, lint, typecheck and test in one go             |
+| `npm run format:check`                    | Prettier verification, reported but never blocking in CI     |
+| `npm run verify`                          | lint, typecheck and test in one go                           |
+| `npm run verify:strict`                   | Adds the Prettier check to `npm run verify`                  |
 | `npm run assets:icons`                    | Regenerate icons and the splash PNG from the SVG sources     |
 | `npm run version:inject`                  | Write a tag version into `package.json`                      |
 | `npm run package`                         | Installers for the current platform                          |
 | `npm run package:win` / `:linux` / `:mac` | Target a single platform                                     |
 | `npm run clean`                           | Remove `out/`, `dist/` and build caches                      |
+
+Formatting is applied automatically. Every push to `main` runs
+`.github/workflows/format.yml`, which installs the pinned Prettier from
+`package.json`, rewrites anything that drifted and commits the result as
+`style: apply prettier formatting`. Writer and checker are therefore the same
+binary, so a version mismatch cannot break the build.
 
 ## Artifacts
 
@@ -57,7 +64,8 @@ restart on change, the renderer hot-reloads.
 | macOS    | `Halcyon-<version>-<arch>.dmg`, `Halcyon-<version>-<arch>.zip`         |
 
 Each platform also emits the `latest*.yml` update manifest that the in-app updater
-reads.
+reads. The output directory is set by `directories.output` in
+`electron-builder.yml` and must match the artifact paths in the workflows.
 
 ## Version and build numbers
 
@@ -94,10 +102,18 @@ Halcyon stores only the refresh token, encrypted at rest with Electron's
 
 ## Releasing
 
+From a terminal:
+
 ```bash
 git tag v1.2.3
 git push origin v1.2.3
 ```
+
+Without a local clone: **Actions → Release request → Run workflow**, then enter
+the tag. The workflow validates the tag against semantic versioning, points it at
+the commit it ran on and calls the release pipeline. Requesting a tag that already
+exists moves it to the current commit, so a failed release can simply be
+requested again.
 
 `.github/workflows/release.yml` then injects the version, regenerates icons, builds
 on all three platforms in parallel, generates a changelog from the commits since
@@ -113,3 +129,4 @@ and publishes it.
 | An AppImage will not run                       | Install `libfuse2`                                                     |
 | Microsoft sign-in returns 403                  | Your Azure app must allow public client flows and personal accounts    |
 | Java download fails behind a proxy             | Set `HTTPS_PROXY`; the HTTP layer honours it                           |
+| An upload step reports no files found          | `directories.output` and the workflow artifact globs have diverged     |
