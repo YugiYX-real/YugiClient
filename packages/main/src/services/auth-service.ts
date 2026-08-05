@@ -1,5 +1,4 @@
-import { randomUUID } from "node:crypto"
-import { createHash } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import { shell } from "electron"
 import type { Account, AccountPatch } from "@halcyon/ipc"
 import type { EventBus } from "../infra/events.ts"
@@ -13,6 +12,7 @@ const XBL_URL = "https://user.auth.xboxlive.com/user/authenticate"
 const XSTS_URL = "https://xsts.auth.xboxlive.com/xsts/authorize"
 const MINECRAFT_LOGIN_URL = "https://api.minecraftservices.com/authentication/login_with_xbox"
 const MINECRAFT_PROFILE_URL = "https://api.minecraftservices.com/minecraft/profile"
+const AVATAR_BASE_URL = "https://crafatar.com/avatars/"
 const SCOPE = "XboxLive.signin offline_access"
 
 export const FALLBACK_CLIENT_ID = "00000000402b5328"
@@ -42,7 +42,9 @@ type TokenResponse = {
 
 type XboxResponse = {
 	readonly Token: string
-	readonly DisplayClaims: { readonly xui: readonly { readonly uhs: string; readonly xid?: string }[] }
+	readonly DisplayClaims: {
+		readonly xui: readonly { readonly uhs: string; readonly xid?: string }[]
+	}
 }
 
 type MinecraftLoginResponse = {
@@ -53,7 +55,11 @@ type MinecraftLoginResponse = {
 type MinecraftProfile = {
 	readonly id: string
 	readonly name: string
-	readonly skins?: readonly { readonly url: string; readonly state: string; readonly variant?: string }[]
+	readonly skins?: readonly {
+		readonly url: string
+		readonly state: string
+		readonly variant?: string
+	}[]
 	readonly capes?: readonly { readonly url: string; readonly state: string }[]
 }
 
@@ -63,11 +69,18 @@ function offlineUuid(username: string): string {
 	bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x30
 	bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80
 	const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("")
-	return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+	return [
+		hex.slice(0, 8),
+		hex.slice(8, 12),
+		hex.slice(12, 16),
+		hex.slice(16, 20),
+		hex.slice(20),
+	].join("-")
 }
 
 function avatarFor(uuid: string): string {
-	return `https://crafatar.com/avatars/${uuid.replaceAll("-", "")}?size=64&overlay`
+	const trimmed = uuid.split("-").join("")
+	return AVATAR_BASE_URL + trimmed + "?size=64&overlay"
 }
 
 function publish(account: StoredAccount): Account {
@@ -112,7 +125,8 @@ export class AuthService {
 	}
 
 	private clientId(): string {
-		return process.env.HALCYON_MSA_CLIENT_ID ?? FALLBACK_CLIENT_ID
+		const configured = process.env.HALCYON_MSA_CLIENT_ID
+		return configured === undefined || configured === "" ? FALLBACK_CLIENT_ID : configured
 	}
 
 	async list(): Promise<readonly Account[]> {
@@ -147,6 +161,10 @@ export class AuthService {
 		}
 
 		const { accounts } = await this.store.read()
+		if (accounts.some((account) => account.kind === "offline" && account.username === trimmed)) {
+			throw new Error(`An offline account named ${trimmed} already exists`)
+		}
+
 		const uuid = offlineUuid(trimmed)
 		const account: StoredAccount = {
 			id: randomUUID(),
@@ -166,6 +184,7 @@ export class AuthService {
 		}
 
 		await this.persist([...accounts, account])
+		this.logger.info(`Added the offline account ${trimmed}`)
 		return publish(account)
 	}
 
@@ -175,13 +194,13 @@ export class AuthService {
 			method: "POST",
 			headers: { "Content-Type": "application/x-www-form-urlencoded" },
 			body: new URLSearchParams({ client_id: clientId, scope: SCOPE }).toString(),
-			retries: 1,
+			retries: 2,
 		})
 
 		this.events.toast(
 			"info",
-			`Enter the code ${device.user_code} to sign in`,
-			`A browser window opened at ${device.verification_uri}`,
+			`Enter the code ${device.user_code} to finish signing in`,
+			`Your browser opened ${device.verification_uri}`,
 		)
 		await shell.openExternal(device.verification_uri)
 
@@ -190,38 +209,50 @@ export class AuthService {
 
 		while (Date.now() < deadline && tokens === undefined) {
 			await delay(Math.max(1, device.interval) * 1000)
-			const response = await this.http.request(TOKEN_URL, {
-				method: "POST",
-				headers: { "Content-Type": "application/x-www-form-urlencoded" },
-				body: new URLSearchParams({
-					client_id: clientId,
-					grant_type: "urn:ietf:params:oauth:grant-type:device_code",
-					device_code: device.device_code,
-				}).toString(),
-				retries: 1,
-				acceptNotFound: true,
-			}).catch(() => undefined)
+
+			const response = await this.http
+				.request(TOKEN_URL, {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/x-www-form-urlencoded",
+						Accept: "application/json",
+					},
+					body: new URLSearchParams({
+						client_id: clientId,
+						grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+						device_code: device.device_code,
+					}).toString(),
+					retries: 1,
+				})
+				.catch((error: unknown) => {
+					this.logger.debug("Device code poll rejected", error)
+					return undefined
+				})
 
 			if (response === undefined) {
 				continue
 			}
-			if (response.ok) {
-				tokens = (await response.json()) as TokenResponse
-				break
+
+			const payload = (await response.json().catch(() => ({}))) as TokenResponse & {
+				error?: string
 			}
 
-			const failure = (await response.json().catch(() => ({}))) as { error?: string }
-			if (failure.error !== undefined && failure.error !== "authorization_pending") {
-				if (failure.error === "slow_down") {
-					await delay(5_000)
-					continue
-				}
-				throw new Error(`Microsoft sign-in failed: ${failure.error}`)
+			if (response.ok && payload.access_token !== undefined) {
+				tokens = payload
+				break
 			}
+			if (payload.error === "authorization_pending" || payload.error === undefined) {
+				continue
+			}
+			if (payload.error === "slow_down") {
+				await delay(5_000)
+				continue
+			}
+			throw new Error(`Microsoft sign-in failed: ${payload.error}`)
 		}
 
 		if (tokens === undefined) {
-			throw new Error("Microsoft sign-in timed out")
+			throw new Error("Microsoft sign-in timed out before it was approved")
 		}
 
 		return this.completeMicrosoftLogin(tokens)
@@ -310,17 +341,22 @@ export class AuthService {
 		if (account.kind === "offline") {
 			return publish(account)
 		}
-		if (account.refreshToken === null) {
+
+		const refreshToken = account.refreshToken
+		if (refreshToken === null) {
 			throw new Error("This account has no refresh token; sign in again")
 		}
 
 		const tokens = await this.http.json<TokenResponse>(TOKEN_URL, {
 			method: "POST",
-			headers: { "Content-Type": "application/x-www-form-urlencoded" },
+			headers: {
+				"Content-Type": "application/x-www-form-urlencoded",
+				Accept: "application/json",
+			},
 			body: new URLSearchParams({
 				client_id: this.clientId(),
 				grant_type: "refresh_token",
-				refresh_token: account.refreshToken,
+				refresh_token: refreshToken,
 				scope: SCOPE,
 			}).toString(),
 		})
@@ -361,21 +397,23 @@ export class AuthService {
 	async update(accountId: string, patch: AccountPatch): Promise<readonly Account[]> {
 		const { accounts } = await this.store.read()
 		return this.persist(
-			accounts.map((account) =>
-				account.id === accountId ? { ...account, ...patch } : account,
-			),
+			accounts.map((account) => (account.id === accountId ? { ...account, ...patch } : account)),
 		)
 	}
 
 	async remove(accountId: string): Promise<readonly Account[]> {
 		const { accounts } = await this.store.read()
-		const remaining = accounts.filter((account) => account.id !== accountId)
+		const remaining = accounts
+			.filter((account) => account.id !== accountId)
+			.map((account, index) => ({ ...account }))
+
 		if (remaining.length > 0 && !remaining.some((account) => account.selected)) {
 			const first = remaining[0]
 			if (first !== undefined) {
-				first.selected = true
+				remaining[0] = { ...first, selected: true }
 			}
 		}
+
 		return this.persist(remaining)
 	}
 
@@ -402,16 +440,14 @@ export class AuthService {
 			nickname?: string | null
 			favorite?: boolean
 		}
+
 		const parsed = JSON.parse(payload) as readonly Portable[]
 		const { accounts } = await this.store.read()
 		const imported: StoredAccount[] = []
 
 		for (const entry of parsed) {
 			const username = entry.username
-			if (username === undefined) {
-				continue
-			}
-			if (accounts.some((account) => account.username === username)) {
+			if (username === undefined || accounts.some((account) => account.username === username)) {
 				continue
 			}
 			const uuid = entry.uuid ?? offlineUuid(username)
@@ -433,6 +469,7 @@ export class AuthService {
 			})
 		}
 
+		this.logger.info(`Imported ${imported.length} account(s)`)
 		return this.persist([...accounts, ...imported])
 	}
 }
