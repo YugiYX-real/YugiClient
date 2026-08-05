@@ -3,7 +3,7 @@ productName: Halcyon
 copyright: Copyright (c) 2026 jjbkl
 
 directories:
-  output: release
+  output: dist
   buildResources: build
 
 files:
