@@ -15,7 +15,7 @@ permissions:
 jobs:
   prettier:
     name: Apply Prettier
-    runs-on: ${{ fromJSON(vars.RUNNER_LABELS || '["self-hosted","Windows"]') }}
+    runs-on: ${{ fromJSON(vars.RUNNER_LABELS || '"ubuntu-latest"') }}
     steps:
       - name: Use unix line endings for every checkout
         shell: bash
