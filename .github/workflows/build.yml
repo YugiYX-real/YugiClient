@@ -20,7 +20,7 @@ env:
 jobs:
   bundle:
     name: Bundle and test
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}
     steps:
       - name: Use unix line endings for every checkout
         run: |
@@ -64,18 +64,19 @@ jobs:
   binaries:
     name: Binaries for ${{ matrix.label }}
     needs: bundle
+    if: ${{ vars.SKIP_BINARY_MATRIX != 'true' }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: windows-latest
+          - os: ${{ vars.WINDOWS_RUNNER || 'windows-latest' }}
             label: windows
             flag: --win
-          - os: ubuntu-latest
+          - os: ${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}
             label: linux
             flag: --linux
-          - os: macos-latest
+          - os: ${{ vars.MACOS_RUNNER || 'macos-latest' }}
             label: macos
             flag: --mac
     steps:
