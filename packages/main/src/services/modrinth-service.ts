@@ -286,6 +286,43 @@ export class ModrinthService implements ContentResolverPort {
 		}
 	}
 
+	/**
+	 * Identifies local files in bulk from their sha1 hashes. Files that were
+	 * dropped into an instance by hand were never linked to a project, so this
+	 * is the only way to recover their title, author and artwork.
+	 */
+	async versionsByHashes(hashes: readonly string[]): Promise<ReadonlyMap<string, ModrinthVersion>> {
+		const matches = new Map<string, ModrinthVersion>()
+		const wanted = [...new Set(hashes)].filter((hash) => hash !== "")
+		if (wanted.length === 0) {
+			return matches
+		}
+
+		try {
+			const raw = await this.http.json<Record<string, RawVersion>>(
+				`${MODRINTH_API}/version_files`,
+				{
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						Accept: "application/json",
+					},
+					body: JSON.stringify({ hashes: wanted, algorithm: "sha1" }),
+				},
+			)
+
+			for (const [hash, value] of Object.entries(raw)) {
+				const version = toVersion(value)
+				this.versionCache.set(version.id, version)
+				matches.set(hash, version)
+			}
+		} catch (error) {
+			this.logger.warn("Could not match installed files against Modrinth", error)
+		}
+
+		return matches
+	}
+
 	async categories(kind: ContentKind): Promise<readonly string[]> {
 		type RawCategory = { readonly name: string; readonly project_type: string }
 		try {
