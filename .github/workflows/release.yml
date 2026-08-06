@@ -31,7 +31,7 @@ env:
 jobs:
   prepare:
     name: Resolve version and changelog
-    runs-on: ${{ fromJSON(vars.RUNNER_LABELS || '["self-hosted","Windows"]') }}
+    runs-on: ${{ fromJSON(vars.RUNNER_LABELS || '"ubuntu-latest"') }}
     outputs:
       tag: ${{ steps.resolve.outputs.tag }}
       version: ${{ steps.resolve.outputs.version }}
@@ -108,7 +108,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(vars.RELEASE_MATRIX || '{"include":[{"label":"windows","flag":"--win","runner":["self-hosted","Windows"]}]}') }}
+      matrix: ${{ fromJSON(vars.RELEASE_MATRIX || '{"include":[{"label":"windows","flag":"--win","runner":"windows-latest"},{"label":"linux","flag":"--linux","runner":"ubuntu-latest"},{"label":"macos","flag":"--mac","runner":"macos-latest"}]}') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -159,7 +159,7 @@ jobs:
     name: Publish the GitHub Release
     needs: [prepare, publish]
     if: ${{ always() && needs.prepare.result == 'success' }}
-    runs-on: ${{ fromJSON(vars.RUNNER_LABELS || '["self-hosted","Windows"]') }}
+    runs-on: ${{ fromJSON(vars.RUNNER_LABELS || '"ubuntu-latest"') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
