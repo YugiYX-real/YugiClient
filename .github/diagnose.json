@@ -1,4 +1,4 @@
 {
-  "requestedAt": "2026-08-06T04:37:00Z",
-  "reason": "Capture the exact verification failure blocking the v1.0.6 release"
+  "requestedAt": "2026-08-06T04:39:00Z",
+  "reason": "Verify the App command syntax fix through lint, typecheck, tests and build"
 }

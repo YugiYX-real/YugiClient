@@ -175,6 +175,7 @@ export function App(): JSX.Element {
 										: "dark",
 						})
 					}
+				},
 			},
 		]
 
