@@ -1,10 +1,54 @@
 import { useEffect, useState } from "react"
-import { Avatar } from "./primitives.tsx"
+
+function PixelHead({ size }: { size: number }): JSX.Element {
+	return (
+		<div
+			className="avatar"
+			aria-label="Minecraft player"
+			style={{
+				width: size,
+				height: size,
+				position: "relative",
+				overflow: "hidden",
+				background: "linear-gradient(145deg, #b67b55, #74452f)",
+			}}
+		>
+			<span
+				style={{
+					position: "absolute",
+					width: size * 0.14,
+					height: size * 0.14,
+					left: size * 0.2,
+					top: size * 0.38,
+					background: "#241913",
+				}}
+			/>
+			<span
+				style={{
+					position: "absolute",
+					width: size * 0.14,
+					height: size * 0.14,
+					right: size * 0.2,
+					top: size * 0.38,
+					background: "#241913",
+				}}
+			/>
+			<span
+				style={{
+					position: "absolute",
+					width: size * 0.28,
+					height: size * 0.1,
+					left: size * 0.36,
+					bottom: size * 0.2,
+					background: "#593525",
+				}}
+			/>
+		</div>
+	)
+}
 
 export function MinecraftAvatar({
 	skinUrl,
-	fallbackUrl,
-	fallback,
 	size = 36,
 }: {
 	skinUrl: string | null
@@ -21,7 +65,7 @@ export function MinecraftAvatar({
 	}, [skinUrl])
 
 	if (skinUrl === null || skinUrl === "" || failed) {
-		return <Avatar source={failed ? null : fallbackUrl} fallback={fallback} size={size} />
+		return <PixelHead size={size} />
 	}
 
 	const textureSize = size * 8
@@ -41,7 +85,7 @@ export function MinecraftAvatar({
 			aria-label="Minecraft skin"
 			style={{ width: size, height: size, position: "relative", overflow: "hidden" }}
 		>
-			<span style={{ opacity: ready ? 0 : 1 }}>{fallback}</span>
+			{ready ? null : <PixelHead size={size} />}
 			<img
 				src={skinUrl}
 				alt=""

@@ -11,6 +11,18 @@ import type { AppPaths } from "../infra/paths.ts"
 import type { AuthService } from "./auth-service.ts"
 
 const SKIN_UPLOAD_URL = "https://api.minecraftservices.com/minecraft/profile/skins"
+const PROFILE_URL = "https://api.minecraftservices.com/minecraft/profile"
+const ACTIVE_CAPE_URL = "https://api.minecraftservices.com/minecraft/profile/capes/active"
+const CAPE_PREFIX = "cape:"
+
+type MinecraftAppearanceProfile = {
+	readonly capes?: readonly {
+		readonly id: string
+		readonly url: string
+		readonly alias?: string
+		readonly state: string
+	}[]
+}
 
 export type SkinState = { entries: SkinEntry[] }
 
@@ -125,11 +137,52 @@ export class SkinService {
 		return entry
 	}
 
-	async apply(accountId: string, skinId: string): Promise<SkinEntry> {
+	private async applyCape(accountId: string, encodedCape: string): Promise<void> {
+		const token = await this.auth.validAccessToken(accountId)
+		if (token === null) {
+			throw new Error("Changing a cape requires a signed-in Microsoft account")
+		}
+
+		if (encodedCape === "none") {
+			await this.http.request(ACTIVE_CAPE_URL, {
+				method: "DELETE",
+				headers: { Authorization: `Bearer ${token}` },
+			})
+			this.events.toast("success", "Cape hidden")
+			return
+		}
+
+		const capeUrl = decodeURIComponent(encodedCape)
+		const profile = await this.http.json<MinecraftAppearanceProfile>(PROFILE_URL, {
+			headers: { Authorization: `Bearer ${token}` },
+		})
+		const cape = profile.capes?.find((candidate) => candidate.url === capeUrl)
+		if (cape === undefined) {
+			throw new Error("That cape is not available on the selected Minecraft account")
+		}
+
+		await this.http.request(ACTIVE_CAPE_URL, {
+			method: "PUT",
+			headers: {
+				Authorization: `Bearer ${token}`,
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify({ capeId: cape.id }),
+		})
+		this.logger.info(`Activated Minecraft cape ${cape.alias ?? cape.id}`)
+		this.events.toast("success", `Cape ${cape.alias ?? "selected"} is now active`)
+	}
+
+	async apply(accountId: string, targetId: string): Promise<SkinEntry | undefined> {
+		if (targetId.startsWith(CAPE_PREFIX)) {
+			await this.applyCape(accountId, targetId.slice(CAPE_PREFIX.length))
+			return undefined
+		}
+
 		const { entries } = await this.store.read()
-		const entry = entries.find((candidate) => candidate.id === skinId)
+		const entry = entries.find((candidate) => candidate.id === targetId)
 		if (entry === undefined) {
-			throw new Error(`Unknown skin "${skinId}"`)
+			throw new Error(`Unknown skin "${targetId}"`)
 		}
 
 		const token = await this.auth.validAccessToken(accountId)
@@ -157,7 +210,7 @@ export class SkinService {
 
 		const applied: SkinEntry = { ...entry, appliedAt: new Date().toISOString() }
 		await this.store.write({
-			entries: entries.map((candidate) => (candidate.id === skinId ? applied : candidate)),
+			entries: entries.map((candidate) => (candidate.id === targetId ? applied : candidate)),
 		})
 		this.logger.info(`Applied skin ${entry.name}`)
 		this.events.toast("success", `Applied ${entry.name}`)

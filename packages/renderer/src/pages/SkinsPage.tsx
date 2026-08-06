@@ -42,7 +42,9 @@ export function SkinsPage(): JSX.Element {
 
 	const entries = skins.data ?? []
 	const active = entries.find((entry) => entry.id === activeId) ?? entries[0]
-	const selectedAccount = (accounts.data ?? []).find((account) => account.selected)
+	const selectedAccount = (accounts.data ?? []).find(
+		(account) => account.selected && account.kind === "microsoft",
+	)
 
 	const upload = async (): Promise<void> => {
 		setBusy(true)
@@ -56,6 +58,17 @@ export function SkinsPage(): JSX.Element {
 			setUploadPath("")
 			setUploading(false)
 			skins.reload()
+		} finally {
+			setBusy(false)
+		}
+	}
+
+	const applyCape = async (capeUrl: string | null): Promise<void> => {
+		setBusy(true)
+		try {
+			const target = capeUrl === null ? "cape:none" : `cape:${encodeURIComponent(capeUrl)}`
+			await invoke("skins:apply", target)
+			accounts.reload()
 		} finally {
 			setBusy(false)
 		}
@@ -80,24 +93,24 @@ export function SkinsPage(): JSX.Element {
 						void invoke("skins:download", "account").then(skins.reload)
 					}}
 				>
-					Import from account
+					Import current skin
 				</Button>
 				<span className="spacer" />
 				{selectedAccount === undefined ? (
-					<Badge tone="warning">Sign in with Microsoft to apply skins</Badge>
+					<Badge tone="warning">Connect a Microsoft account to apply appearance</Badge>
 				) : (
-					<Badge tone="accent">Wardrobe of {selectedAccount.username}</Badge>
+					<Badge tone="accent">Editing {selectedAccount.username}</Badge>
 				)}
 			</div>
 
 			<div className="grid cols-2">
 				<Card>
-					<SectionHeader title="Live preview" subtitle="Drag to rotate the model" />
+					<SectionHeader title="Live skin preview" subtitle="Drag to rotate the model" />
 					{active === undefined ? (
 						<EmptyState
 							icon="skins"
 							title="No skin selected"
-							description="Add a skin to see it here."
+							description="Add a PNG skin to preview and apply it."
 						/>
 					) : (
 						<>
@@ -107,9 +120,7 @@ export function SkinsPage(): JSX.Element {
 								<Badge>{active.model}</Badge>
 								<Badge>{active.source}</Badge>
 								{active.appliedAt === null ? null : (
-									<Badge tone="success">
-										applied {formatDate(active.appliedAt)}
-									</Badge>
+									<Badge tone="success">applied {formatDate(active.appliedAt)}</Badge>
 								)}
 							</div>
 							<div className="row wrap" style={{ marginTop: 12 }}>
@@ -122,7 +133,7 @@ export function SkinsPage(): JSX.Element {
 										void invoke("skins:apply", active.id).then(skins.reload)
 									}}
 								>
-									Apply to account
+									Use this skin
 								</Button>
 								<Button
 									icon="star"
@@ -137,14 +148,6 @@ export function SkinsPage(): JSX.Element {
 									{active.favorite ? "Unfavourite" : "Favourite"}
 								</Button>
 								<Button
-									icon="downloads"
-									onClick={() => {
-										void invoke("skins:download", active.id)
-									}}
-								>
-									Save as PNG
-								</Button>
-								<Button
 									variant="ghost"
 									icon="trash"
 									onClick={() => {
@@ -157,10 +160,7 @@ export function SkinsPage(): JSX.Element {
 				</Card>
 
 				<Card>
-					<SectionHeader
-						title="Wardrobe"
-						subtitle={`${entries.length} skins in your history`}
-					/>
+					<SectionHeader title="Skin wardrobe" subtitle={`${entries.length} saved skins`} />
 					<DropZone
 						label="Drop a 64x64 skin PNG here"
 						onFiles={(paths) => {
@@ -179,7 +179,7 @@ export function SkinsPage(): JSX.Element {
 						<EmptyState
 							icon="skins"
 							title="Wardrobe is empty"
-							description="Upload a skin or import the one on your Microsoft account."
+							description="Upload a skin or import your current Minecraft skin."
 						/>
 					) : (
 						<div className="grid cols-4" style={{ marginTop: 14 }}>
@@ -204,9 +204,7 @@ export function SkinsPage(): JSX.Element {
 											background: "var(--surface-3)",
 										}}
 									/>
-									<div style={{ marginTop: 8, fontSize: "0.8rem" }}>
-										{entry.name}
-									</div>
+									<div style={{ marginTop: 8, fontSize: "0.8rem" }}>{entry.name}</div>
 									{entry.favorite ? <Badge tone="accent">favourite</Badge> : null}
 								</button>
 							))}
@@ -214,6 +212,63 @@ export function SkinsPage(): JSX.Element {
 					)}
 				</Card>
 			</div>
+
+			<Card>
+				<SectionHeader
+					title="Cape wardrobe"
+					subtitle="Only capes owned by the selected Minecraft account can be equipped"
+				/>
+				{selectedAccount === undefined ? (
+					<EmptyState
+						icon="accounts"
+						title="No account selected"
+						description="Connect and select a Microsoft account first."
+					/>
+				) : selectedAccount.capes.length === 0 ? (
+					<EmptyState
+						icon="sparkle"
+						title="No capes owned"
+						description="Minecraft did not report any capes for this account."
+					/>
+				) : (
+					<div className="row wrap" style={{ marginTop: 14, alignItems: "stretch" }}>
+						{selectedAccount.capes.map((capeUrl, index) => (
+							<Card key={capeUrl} flat>
+								<img
+									src={capeUrl}
+									alt={`Cape ${index + 1}`}
+									style={{
+										width: 96,
+										height: 64,
+										objectFit: "contain",
+										imageRendering: "pixelated",
+									}}
+								/>
+								<Button
+									block
+									size="small"
+									variant="primary"
+									busy={busy}
+									onClick={() => {
+										void applyCape(capeUrl)
+									}}
+								>
+									Equip cape {index + 1}
+								</Button>
+							</Card>
+						))}
+						<Button
+							variant="ghost"
+							busy={busy}
+							onClick={() => {
+								void applyCape(null)
+							}}
+						>
+							Hide cape
+						</Button>
+					</div>
+				)}
+			</Card>
 
 			{uploading ? (
 				<Modal
@@ -224,12 +279,7 @@ export function SkinsPage(): JSX.Element {
 					}}
 					footer={
 						<>
-							<Button
-								variant="ghost"
-								onClick={() => {
-									setUploading(false)
-								}}
-							>
+							<Button variant="ghost" onClick={() => setUploading(false)}>
 								Cancel
 							</Button>
 							<Button
@@ -245,27 +295,17 @@ export function SkinsPage(): JSX.Element {
 					}
 				>
 					<Field label="Name" hint="Optional label for your wardrobe">
-						<TextInput
-							value={uploadName}
-							onChange={setUploadName}
-							placeholder="Winter cloak"
-						/>
+						<TextInput value={uploadName} onChange={setUploadName} />
 					</Field>
 					<Field label="Model">
 						<Select value={uploadModel} onChange={setUploadModel} options={MODELS} />
 					</Field>
 					<Field label="File" hint="Leave empty to open a file picker">
-						<TextInput
-							value={uploadPath}
-							onChange={setUploadPath}
-							placeholder="C:\\skins\\my-skin.png"
-						/>
+						<TextInput value={uploadPath} onChange={setUploadPath} />
 					</Field>
 					<DropZone
 						label="or drop the PNG here"
-						onFiles={(paths) => {
-							setUploadPath(paths[0] ?? "")
-						}}
+						onFiles={(paths) => setUploadPath(paths[0] ?? "")}
 					/>
 				</Modal>
 			) : null}
@@ -276,9 +316,7 @@ export function SkinsPage(): JSX.Element {
 					message={`${removing.name} will be removed from your wardrobe. Your applied skin stays untouched.`}
 					confirmLabel="Remove"
 					destructive
-					onCancel={() => {
-						setRemoving(null)
-					}}
+					onCancel={() => setRemoving(null)}
 					onConfirm={() => {
 						const target = removing
 						setRemoving(null)
