@@ -14,9 +14,13 @@ import {
 import { MinecraftAvatar } from "../components/MinecraftAvatar.tsx"
 import { invoke } from "../lib/client.ts"
 import { useAsync, useIpcEvent } from "../lib/hooks.ts"
-import { formatRelative, initialsOf } from "../lib/format.ts"
+import { formatRelative } from "../lib/format.ts"
 
-export function AccountsPage(): JSX.Element {
+export function AccountsPage({
+	onEditAppearance,
+}: {
+	onEditAppearance?: () => void
+}): JSX.Element {
 	const accounts = useAsync<readonly Account[]>(() => invoke("accounts:list"), [])
 	const [nicknaming, setNicknaming] = useState<Account | null>(null)
 	const [nickname, setNickname] = useState("")
@@ -35,6 +39,12 @@ export function AccountsPage(): JSX.Element {
 		}
 	}
 
+	const editAppearance = (): void => {
+		if (onEditAppearance !== undefined) {
+			onEditAppearance()
+		}
+	}
+
 	const entries = (accounts.data ?? []).filter((account) => account.kind === "microsoft")
 
 	return (
@@ -50,6 +60,9 @@ export function AccountsPage(): JSX.Element {
 				>
 					Add Microsoft account
 				</Button>
+				{entries.length === 0 ? null : (
+					<Button onClick={editAppearance}>Edit skin &amp; cape</Button>
+				)}
 				<span className="spacer" />
 				<Badge tone="success">Sessions renew automatically</Badge>
 			</div>
@@ -93,8 +106,7 @@ export function AccountsPage(): JSX.Element {
 								<MinecraftAvatar
 									skinUrl={account.skinUrl}
 									fallbackUrl={account.avatarUrl}
-									fallback={initialsOf(account.username)}
-									size={52}
+									size={72}
 								/>
 								<div className="col" style={{ gap: 2, minWidth: 0, flex: 1 }}>
 									<strong>{account.nickname ?? account.username}</strong>
@@ -111,7 +123,6 @@ export function AccountsPage(): JSX.Element {
 							<div className="row wrap" style={{ marginTop: 12, gap: 6 }}>
 								<Badge tone="success">Microsoft</Badge>
 								{account.selected ? <Badge tone="accent">active</Badge> : null}
-								{account.skinUrl === null ? null : <Badge>skin loaded</Badge>}
 								{account.capes.length === 0 ? null : (
 									<Badge>{account.capes.length} owned capes</Badge>
 								)}
@@ -132,6 +143,23 @@ export function AccountsPage(): JSX.Element {
 										Use
 									</Button>
 								)}
+								<Button
+									size="small"
+									onClick={() => {
+										if (!account.selected) {
+											void invoke("accounts:select", account.id).then(
+												() => {
+													accounts.reload()
+													editAppearance()
+												},
+											)
+											return
+										}
+										editAppearance()
+									}}
+								>
+									Edit skin &amp; cape
+								</Button>
 								<Button
 									size="small"
 									icon="star"
