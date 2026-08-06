@@ -16,7 +16,7 @@ export const ROUTE_TITLES: Record<RouteId, { title: string; subtitle: string }> 
 	dashboard: { title: "Dashboard", subtitle: "Everything you need, one glance away" },
 	instances: { title: "Instances", subtitle: "Create, tune and launch your worlds" },
 	discover: { title: "Discover", subtitle: "Mods, shaders and packs from Modrinth" },
-	accounts: { title: "Accounts", subtitle: "Microsoft and offline profiles" },
+	accounts: { title: "Accounts", subtitle: "Microsoft profiles and automatic sessions" },
 	skins: { title: "Skins", subtitle: "Your wardrobe with live preview" },
 	java: { title: "Java", subtitle: "Runtimes detected and managed for you" },
 	downloads: { title: "Downloads", subtitle: "Queue, speed and failures at a glance" },

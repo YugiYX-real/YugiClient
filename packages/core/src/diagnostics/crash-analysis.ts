@@ -144,8 +144,8 @@ const SIGNATURES: readonly Signature[] = [
 		explain: () =>
 			"The access token used to join servers was expired or rejected. Tokens are short lived and must be refreshed.",
 		remedies: () => [
-			"Re-select the account so Halcyon refreshes the token, then launch again.",
-			"Offline accounts cannot join online-mode servers.",
+			"Halcyon refreshes Microsoft sessions automatically; retry the launch once.",
+			"If the session is still rejected, sign out and sign in to Microsoft again.",
 		],
 	},
 	{

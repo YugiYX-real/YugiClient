@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto"
+import { randomUUID } from "node:crypto"
 import { shell } from "electron"
 import type { Account, AccountPatch } from "@halcyon/ipc"
 import type { EventBus } from "../infra/events.ts"
@@ -72,21 +72,6 @@ type MinecraftProfile = {
 	readonly capes?: readonly { readonly url: string; readonly state: string }[]
 }
 
-function offlineUuid(username: string): string {
-	const hash = createHash("md5").update(`OfflinePlayer:${username}`).digest()
-	const bytes = Uint8Array.from(hash)
-	bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x30
-	bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80
-	const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("")
-	return [
-		hex.slice(0, 8),
-		hex.slice(8, 12),
-		hex.slice(12, 16),
-		hex.slice(16, 20),
-		hex.slice(20),
-	].join("-")
-}
-
 function avatarFor(uuid: string): string {
 	const trimmed = uuid.split("-").join("")
 	return AVATAR_BASE_URL + trimmed + "?size=64&overlay"
@@ -113,6 +98,10 @@ function delay(ms: number): Promise<void> {
 	return new Promise((resolve) => {
 		setTimeout(resolve, ms)
 	})
+}
+
+function microsoftAccounts(accounts: readonly StoredAccount[]): StoredAccount[] {
+	return accounts.filter((account) => account.kind === "microsoft")
 }
 
 export class AuthService {
@@ -149,7 +138,7 @@ export class AuthService {
 
 	async list(): Promise<readonly Account[]> {
 		const { accounts } = await this.store.read()
-		return accounts
+		return microsoftAccounts(accounts)
 			.map(publish)
 			.sort((left, right) =>
 				left.favorite === right.favorite
@@ -162,50 +151,21 @@ export class AuthService {
 
 	async selected(): Promise<StoredAccount | undefined> {
 		const { accounts } = await this.store.read()
-		return accounts.find((account) => account.selected) ?? accounts[0]
+		const supported = microsoftAccounts(accounts)
+		return supported.find((account) => account.selected) ?? supported[0]
 	}
 
 	private async persist(accounts: readonly StoredAccount[]): Promise<readonly Account[]> {
-		await this.store.write({ accounts: [...accounts] })
-		const published = accounts.map(publish)
+		const supported = microsoftAccounts(accounts)
+		await this.store.write({ accounts: supported })
+		const published = supported.map(publish)
 		this.events.emit("accounts:changed", { accounts: published })
 		return published
 	}
 
 	async addOffline(username: string): Promise<Account> {
-		const trimmed = username.trim()
-		if (!/^[A-Za-z0-9_]{3,16}$/.test(trimmed)) {
-			throw new Error("Offline usernames must be 3-16 letters, digits or underscores")
-		}
-
-		const { accounts } = await this.store.read()
-		if (
-			accounts.some((account) => account.kind === "offline" && account.username === trimmed)
-		) {
-			throw new Error(`An offline account named ${trimmed} already exists`)
-		}
-
-		const uuid = offlineUuid(trimmed)
-		const account: StoredAccount = {
-			id: randomUUID(),
-			kind: "offline",
-			username: trimmed,
-			uuid,
-			nickname: null,
-			favorite: false,
-			selected: accounts.length === 0,
-			avatarUrl: avatarFor(uuid),
-			skinUrl: null,
-			capes: [],
-			expiresAt: null,
-			lastUsedAt: null,
-			accessToken: null,
-			refreshToken: null,
-		}
-
-		await this.persist([...accounts, account])
-		this.logger.info(`Added the offline account ${trimmed}`)
-		return publish(account)
+		void username
+		throw new Error("Offline accounts are not supported. Sign in with Microsoft instead.")
 	}
 
 	async loginMicrosoft(): Promise<Account> {
@@ -350,10 +310,9 @@ export class AuthService {
 			headers: { Authorization: `Bearer ${minecraft.access_token}` },
 		})
 
-		const { accounts } = await this.store.read()
-		const existing = accounts.find(
-			(account) => account.kind === "microsoft" && account.uuid === profile.id,
-		)
+		const { accounts: storedAccounts } = await this.store.read()
+		const accounts = microsoftAccounts(storedAccounts)
+		const existing = accounts.find((account) => account.uuid === profile.id)
 
 		const account: StoredAccount = {
 			id: existing?.id ?? randomUUID(),
@@ -387,12 +346,11 @@ export class AuthService {
 
 	async refresh(accountId: string): Promise<Account> {
 		const { accounts } = await this.store.read()
-		const account = accounts.find((candidate) => candidate.id === accountId)
+		const account = microsoftAccounts(accounts).find(
+			(candidate) => candidate.id === accountId,
+		)
 		if (account === undefined) {
-			throw new Error(`Unknown account "${accountId}"`)
-		}
-		if (account.kind === "offline") {
-			return publish(account)
+			throw new Error(`Unknown Microsoft account "${accountId}"`)
 		}
 
 		const refreshToken = account.refreshToken
@@ -425,8 +383,10 @@ export class AuthService {
 
 	async validAccessToken(accountId: string): Promise<string | null> {
 		const { accounts } = await this.store.read()
-		const account = accounts.find((candidate) => candidate.id === accountId)
-		if (account === undefined || account.kind === "offline") {
+		const account = microsoftAccounts(accounts).find(
+			(candidate) => candidate.id === accountId,
+		)
+		if (account === undefined) {
 			return null
 		}
 
@@ -436,7 +396,7 @@ export class AuthService {
 		}
 
 		await this.refresh(accountId)
-		const refreshed = (await this.store.read()).accounts.find(
+		const refreshed = microsoftAccounts((await this.store.read()).accounts).find(
 			(candidate) => candidate.id === accountId,
 		)
 		return refreshed?.accessToken ?? null
@@ -445,7 +405,7 @@ export class AuthService {
 	async select(accountId: string): Promise<readonly Account[]> {
 		const { accounts } = await this.store.read()
 		return this.persist(
-			accounts.map((account) => ({
+			microsoftAccounts(accounts).map((account) => ({
 				...account,
 				selected: account.id === accountId,
 				lastUsedAt:
@@ -457,7 +417,7 @@ export class AuthService {
 	async update(accountId: string, patch: AccountPatch): Promise<readonly Account[]> {
 		const { accounts } = await this.store.read()
 		return this.persist(
-			accounts.map((account) =>
+			microsoftAccounts(accounts).map((account) =>
 				account.id === accountId ? { ...account, ...patch } : account,
 			),
 		)
@@ -465,7 +425,9 @@ export class AuthService {
 
 	async remove(accountId: string): Promise<readonly Account[]> {
 		const { accounts } = await this.store.read()
-		const remaining = accounts.filter((account) => account.id !== accountId)
+		const remaining = microsoftAccounts(accounts).filter(
+			(account) => account.id !== accountId,
+		)
 
 		if (remaining.length > 0 && !remaining.some((account) => account.selected)) {
 			const first = remaining[0]
@@ -479,10 +441,10 @@ export class AuthService {
 	}
 
 	async exportAccounts(): Promise<string> {
-		const { accounts } = await this.store.read()
+		const accounts = await this.list()
 		return JSON.stringify(
 			accounts.map((account) => ({
-				kind: account.kind,
+				kind: "microsoft",
 				username: account.username,
 				uuid: account.uuid,
 				nickname: account.nickname,
@@ -494,46 +456,7 @@ export class AuthService {
 	}
 
 	async importAccounts(payload: string): Promise<readonly Account[]> {
-		type Portable = {
-			kind?: string
-			username?: string
-			uuid?: string
-			nickname?: string | null
-			favorite?: boolean
-		}
-
-		const parsed = JSON.parse(payload) as readonly Portable[]
-		const { accounts } = await this.store.read()
-		const imported: StoredAccount[] = []
-
-		for (const entry of parsed) {
-			const username = entry.username
-			if (
-				username === undefined ||
-				accounts.some((account) => account.username === username)
-			) {
-				continue
-			}
-			const uuid = entry.uuid ?? offlineUuid(username)
-			imported.push({
-				id: randomUUID(),
-				kind: entry.kind === "microsoft" ? "microsoft" : "offline",
-				username,
-				uuid,
-				nickname: entry.nickname ?? null,
-				favorite: entry.favorite ?? false,
-				selected: false,
-				avatarUrl: avatarFor(uuid),
-				skinUrl: null,
-				capes: [],
-				expiresAt: null,
-				lastUsedAt: null,
-				accessToken: null,
-				refreshToken: null,
-			})
-		}
-
-		this.logger.info(`Imported ${imported.length} account(s)`)
-		return this.persist([...accounts, ...imported])
+		void payload
+		throw new Error("Account imports are disabled. Sign in with Microsoft instead.")
 	}
 }
