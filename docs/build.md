@@ -83,11 +83,29 @@ against semantic versioning and rewrites `package.json`.
 
 ## Optional environment variables
 
-| Variable                    | Effect                                                                                                                                         |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `HALCYON_MSA_CLIENT_ID`     | Azure application (client) ID used for Microsoft sign-in. Falls back to the public Minecraft launcher client id, which works for personal use. |
-| `HALCYON_DISCORD_CLIENT_ID` | Enables Discord Rich Presence. Presence stays disabled when unset.                                                                             |
-| `GH_TOKEN`                  | Only needed when publishing releases locally; CI supplies `secrets.GITHUB_TOKEN`.                                                              |
+| Variable                       | Effect                                                                                                                                         |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `HALCYON_MSA_CLIENT_ID`        | Azure application (client) ID used for Microsoft sign-in. Falls back to the public Minecraft launcher client id, which works for personal use. |
+| `HALCYON_DISCORD_CLIENT_ID`    | Enables Discord Rich Presence. Presence stays disabled when unset.                                                                             |
+| `HALCYON_GITHUB_TOKEN`         | Lets an installed launcher read this private repository's releases. The token stays in the process environment and is never bundled or saved.  |
+| `GH_TOKEN`                     | Only needed when publishing releases locally; CI supplies `secrets.GITHUB_TOKEN`.                                                              |
+
+### Accessing private launcher updates
+
+Create a fine-grained personal access token restricted to `YugiYX-real/YugiClient`
+with read-only **Contents** access. Set it as `HALCYON_GITHUB_TOKEN` before starting
+Halcyon. Never put the token in source code, a release, a shortcut checked into Git, or
+an issue.
+
+PowerShell for the current terminal:
+
+```powershell
+$env:HALCYON_GITHUB_TOKEN = "github_pat_..."
+& "$env:LOCALAPPDATA\Programs\Halcyon\Halcyon.exe"
+```
+
+To avoid typing it on every launch, set a user-level environment variable in Windows
+and restart Halcyon. Revoking the token immediately removes update-feed access.
 
 ### Registering your own Azure application
 
@@ -128,5 +146,6 @@ and publishes it.
 | Electron fails to start on Linux               | Install `libnss3`, `libatk1.0-0`, `libgtk-3-0`                         |
 | An AppImage will not run                       | Install `libfuse2`                                                     |
 | Microsoft sign-in returns 403                  | Your Azure app must allow public client flows and personal accounts    |
+| Private update access is denied                | Set a valid read-only `HALCYON_GITHUB_TOKEN` and restart Halcyon       |
 | Java download fails behind a proxy             | Set `HTTPS_PROXY`; the HTTP layer honours it                           |
 | An upload step reports no files found          | `directories.output` and the workflow artifact globs have diverged     |

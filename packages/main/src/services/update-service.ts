@@ -10,12 +10,12 @@ import type { Logger } from "../infra/logger.ts"
 const requireCjs = createRequire(import.meta.url)
 const { autoUpdater } = requireCjs("electron-updater") as { autoUpdater: AppUpdater }
 
-const UNREADABLE_FEED = /releases\.atom|authentication token is correct|404/i
+const UNREADABLE_FEED = /releases\.atom|authentication token is correct|401|403|404/i
 const OFFLINE = /ENOTFOUND|EAI_AGAIN|ETIMEDOUT|ECONNRESET|ECONNREFUSED|net::ERR/i
 
 const UNREADABLE_FEED_MESSAGE =
-	"Update checks are unavailable because the release feed cannot be read. " +
-	"Publish the repository or install new versions manually."
+	"The private update feed needs access. Set HALCYON_GITHUB_TOKEN to a fine-grained, " +
+	"read-only token for YugiYX-real/YugiClient and restart Halcyon."
 const OFFLINE_MESSAGE = "Update checks are unavailable because the launcher is offline."
 
 export type UpdateHistoryState = { installedVersions: string[] }
@@ -50,6 +50,11 @@ function explain(error: unknown): string {
 	return message
 }
 
+function updateToken(): string | undefined {
+	const token = process.env.HALCYON_GITHUB_TOKEN?.trim()
+	return token === undefined || token === "" ? undefined : token
+}
+
 export class UpdateService {
 	private readonly logger: Logger
 	private readonly events: EventBus
@@ -82,6 +87,15 @@ export class UpdateService {
 		autoUpdater.autoDownload = autoDownload
 		autoUpdater.autoInstallOnAppQuit = true
 		autoUpdater.allowDowngrade = false
+
+		const token = updateToken()
+		if (token !== undefined) {
+			// The private GitHub provider reads GH_TOKEN lazily when the first check starts.
+			// Keep the user-owned token out of packaged files and persistent launcher data.
+			process.env.GH_TOKEN = token
+			autoUpdater.addAuthHeader(`token ${token}`)
+			this.logger.info("Authenticated access to the private update feed is enabled")
+		}
 
 		autoUpdater.on("checking-for-update", () => {
 			this.patch({ state: "checking", error: null })

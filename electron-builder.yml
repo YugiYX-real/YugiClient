@@ -20,6 +20,7 @@ publish:
   provider: github
   owner: YugiYX-real
   repo: YugiClient
+  private: true
   releaseType: release
 
 win:
