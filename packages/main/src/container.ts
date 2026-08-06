@@ -28,6 +28,7 @@ import { ModrinthService } from "./services/modrinth-service.ts"
 import { DEFAULT_PLUGIN_STATE, PluginService } from "./services/plugin-service.ts"
 import type { PluginState } from "./services/plugin-service.ts"
 import { PresenceService } from "./services/presence-service.ts"
+import { SessionRefreshService } from "./services/session-refresh-service.ts"
 import { SettingsService, defaultSettings } from "./services/settings-service.ts"
 import { DEFAULT_SKIN_STATE, SkinService } from "./services/skin-service.ts"
 import type { SkinState } from "./services/skin-service.ts"
@@ -162,6 +163,8 @@ export async function createContainer(options: {
 		logger: log.logger("accounts"),
 		events,
 	})
+	const sessions = new SessionRefreshService(auth, log.logger("sessions"))
+	sessions.start()
 
 	const skins = new SkinService({
 		store: new JsonStore<SkinState>({
@@ -296,6 +299,7 @@ export async function createContainer(options: {
 		plugins,
 		dashboard,
 		async dispose(): Promise<void> {
+			sessions.dispose()
 			launch.stopAll()
 			presence.dispose()
 			await plugins.dispose()

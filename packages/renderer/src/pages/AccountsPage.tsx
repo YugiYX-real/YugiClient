@@ -1,7 +1,6 @@
 import { useState } from "react"
 import type { Account } from "@halcyon/ipc"
 import {
-	Avatar,
 	Badge,
 	Button,
 	Card,
@@ -12,9 +11,12 @@ import {
 	Skeleton,
 	TextInput,
 } from "../components/primitives.tsx"
+import { MinecraftAvatar } from "../components/MinecraftAvatar.tsx"
 import { invoke } from "../lib/client.ts"
 import { useAsync, useIpcEvent } from "../lib/hooks.ts"
 import { formatRelative, initialsOf } from "../lib/format.ts"
+
+const MINECRAFT_APPEARANCE_URL = "https://www.minecraft.net/msaprofile/mygames/editskin"
 
 export function AccountsPage(): JSX.Element {
 	const accounts = useAsync<readonly Account[]>(() => invoke("accounts:list"), [])
@@ -84,9 +86,8 @@ export function AccountsPage(): JSX.Element {
 			{signingIn ? (
 				<Card flat>
 					<small>
-						A browser window opened for the Microsoft device code flow. Finish signing
-						in there; Halcyon stores only the refresh token, encrypted at rest in your
-						user data folder.
+						A secure Microsoft sign-in window opened. Finish signing in there; Halcyon
+						keeps the refresh token so your Minecraft session can renew automatically.
 					</small>
 				</Card>
 			) : null}
@@ -106,8 +107,9 @@ export function AccountsPage(): JSX.Element {
 					{entries.map((account) => (
 						<Card key={account.id} className={account.selected ? "" : "flat"}>
 							<div className="row" style={{ alignItems: "flex-start" }}>
-								<Avatar
-									source={account.avatarUrl}
+								<MinecraftAvatar
+									skinUrl={account.skinUrl}
+									fallbackUrl={account.avatarUrl}
 									fallback={initialsOf(account.username)}
 									size={44}
 								/>
@@ -173,16 +175,26 @@ export function AccountsPage(): JSX.Element {
 									}}
 								/>
 								{account.kind === "microsoft" ? (
-									<Button
-										size="small"
-										icon="refresh"
-										title="Refresh session"
-										onClick={() => {
-											void invoke("accounts:refresh", account.id).then(
-												accounts.reload,
-											)
-										}}
-									/>
+									<>
+										<Button
+											size="small"
+											icon="skins"
+											title="Edit skin and cape"
+											onClick={() => {
+												void invoke("app:openExternal", MINECRAFT_APPEARANCE_URL)
+											}}
+										/>
+										<Button
+											size="small"
+											icon="refresh"
+											title="Refresh session now"
+											onClick={() => {
+												void invoke("accounts:refresh", account.id).then(
+													accounts.reload,
+												)
+											}}
+										/>
+									</>
 								) : null}
 								<span className="spacer" />
 								<Button
