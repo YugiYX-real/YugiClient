@@ -346,9 +346,7 @@ export class AuthService {
 
 	async refresh(accountId: string): Promise<Account> {
 		const { accounts } = await this.store.read()
-		const account = microsoftAccounts(accounts).find(
-			(candidate) => candidate.id === accountId,
-		)
+		const account = microsoftAccounts(accounts).find((candidate) => candidate.id === accountId)
 		if (account === undefined) {
 			throw new Error(`Unknown Microsoft account "${accountId}"`)
 		}
@@ -383,9 +381,7 @@ export class AuthService {
 
 	async validAccessToken(accountId: string): Promise<string | null> {
 		const { accounts } = await this.store.read()
-		const account = microsoftAccounts(accounts).find(
-			(candidate) => candidate.id === accountId,
-		)
+		const account = microsoftAccounts(accounts).find((candidate) => candidate.id === accountId)
 		if (account === undefined) {
 			return null
 		}
@@ -425,9 +421,7 @@ export class AuthService {
 
 	async remove(accountId: string): Promise<readonly Account[]> {
 		const { accounts } = await this.store.read()
-		const remaining = microsoftAccounts(accounts).filter(
-			(account) => account.id !== accountId,
-		)
+		const remaining = microsoftAccounts(accounts).filter((account) => account.id !== accountId)
 
 		if (remaining.length > 0 && !remaining.some((account) => account.selected)) {
 			const first = remaining[0]
