@@ -263,9 +263,13 @@ function ProjectModal({
 	)
 }
 
-export function DiscoverPage(): JSX.Element {
+export function DiscoverPage({
+	initialInstanceId = "",
+}: {
+	initialInstanceId?: string
+}): JSX.Element {
 	const instances = useAsync<readonly InstanceSummary[]>(() => invoke("instances:list"), [])
-	const [instanceId, setInstanceId] = useState("")
+	const [instanceId, setInstanceId] = useState(initialInstanceId)
 	const [kind, setKind] = useState<ContentKind>("mod")
 	const [query, setQuery] = useState("")
 	const [sort, setSort] = useState<ModrinthSortOrder>("relevance")

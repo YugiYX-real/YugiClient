@@ -175,7 +175,6 @@ export function App(): JSX.Element {
 										: "dark",
 						})
 					}
-				},
 			},
 		]
 
@@ -201,7 +200,11 @@ export function App(): JSX.Element {
 			<Sidebar
 				route={route}
 				onNavigate={(next) => {
-					navigate(next)
+					const target =
+						next === "discover" && route === "instances" && instanceId !== null
+							? instanceId
+							: undefined
+					navigate(next, target)
 				}}
 				activeDownloads={activeDownloads}
 				runningInstances={instances.filter((instance) => instance.running).length}
@@ -217,6 +220,18 @@ export function App(): JSX.Element {
 						<small>{heading.subtitle}</small>
 					</div>
 					<div className="topbar-actions">
+						{route === "instances" && instanceId !== null ? (
+							<Button
+								size="small"
+								variant="primary"
+								icon="discover"
+								onClick={() => {
+									navigate("discover", instanceId)
+								}}
+							>
+								Discover mods
+							</Button>
+						) : null}
 						<div style={{ position: "relative" }}>
 							<SearchInput
 								value={quickSearch}
@@ -293,7 +308,9 @@ export function App(): JSX.Element {
 							}}
 						/>
 					) : null}
-					{route === "discover" ? <DiscoverPage /> : null}
+					{route === "discover" ? (
+						<DiscoverPage initialInstanceId={instanceId ?? undefined} />
+					) : null}
 					{route === "accounts" ? <AccountsPage /> : null}
 					{route === "skins" ? <SkinsPage /> : null}
 					{route === "java" ? <JavaPage /> : null}
