@@ -6,7 +6,7 @@ merged.
 ## Getting set up
 
 ```bash
-git clone https://github.com/jjbkl/YugiClient.git
+git clone https://github.com/YugiYX-real/YugiClient.git
 cd YugiClient
 npm install
 npm run dev
@@ -105,5 +105,6 @@ Do not open a public issue for vulnerabilities. See [SECURITY.md](SECURITY.md).
 
 ## Licence
 
-Contributions are accepted under the [MIT licence](LICENSE). Only submit code you have
-the right to contribute, and never copy assets, branding or code from other launchers.
+Contributions are accepted under the [MIT licence](LICENSE). YugiYX remains the sole
+named author and copyright holder of Halcyon. Only submit code you have the right to
+contribute, and never copy assets, branding or code from other launchers.

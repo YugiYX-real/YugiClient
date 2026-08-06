@@ -5,7 +5,7 @@
 Please do not open a public issue for security problems.
 
 Use GitHub's private reporting instead:
-[Security → Report a vulnerability](https://github.com/jjbkl/YugiClient/security/advisories/new).
+[Security → Report a vulnerability](https://github.com/YugiYX-real/YugiClient/security/advisories/new).
 
 Include the affected version, the platform, reproduction steps and, if you have one, a
 proof of concept. You will get an acknowledgement within a few days, and a fix or a
@@ -18,12 +18,11 @@ automatically unless you disabled automatic updates.
 
 ## How Halcyon handles your credentials
 
-- Microsoft sign-in uses the OAuth device code flow. Halcyon never sees or stores your
-  password.
+- Microsoft sign-in uses OAuth. Halcyon never sees or stores your password.
 - Only the refresh token is persisted, encrypted at rest with Electron's `safeStorage`,
   which is backed by DPAPI on Windows, Keychain on macOS and the platform secret service
   on Linux.
-- Access tokens live in memory and are refreshed on demand.
+- Access tokens live in memory and are refreshed automatically.
 - Nothing is sent anywhere except Microsoft, Mojang, Modrinth, Adoptium, the loader
   metadata services and GitHub for updates. Exported account files intentionally contain
   no tokens.

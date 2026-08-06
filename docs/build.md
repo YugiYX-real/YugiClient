@@ -18,7 +18,7 @@ Platform extras:
 ## First run
 
 ```bash
-git clone https://github.com/jjbkl/YugiClient.git
+git clone https://github.com/YugiYX-real/YugiClient.git
 cd YugiClient
 npm install
 npm run dev
@@ -93,12 +93,12 @@ against semantic versioning and rewrites `package.json`.
 
 1. Azure Portal → **App registrations** → **New registration**.
 2. Supported account types: **Personal Microsoft accounts only**.
-3. Authentication → **Allow public client flows: Yes**. Halcyon uses the OAuth
-   device code flow, so no redirect URI and no client secret are required.
+3. Authentication → **Allow public client flows: Yes**. Halcyon uses OAuth without a
+   client secret.
 4. Copy the Application (client) ID into `HALCYON_MSA_CLIENT_ID`.
 
 Halcyon stores only the refresh token, encrypted at rest with Electron's
-`safeStorage`. Access tokens live in memory and are refreshed on demand.
+`safeStorage`. Access tokens live in memory and are refreshed automatically.
 
 ## Releasing
 

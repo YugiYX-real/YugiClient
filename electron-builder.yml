@@ -1,6 +1,6 @@
 appId: dev.yugi.halcyon
 productName: Halcyon
-copyright: Copyright (c) 2026 jjbkl
+copyright: Copyright (c) 2026 YugiYX
 
 directories:
   output: dist
@@ -18,7 +18,7 @@ buildDependenciesFromSource: false
 
 publish:
   provider: github
-  owner: jjbkl
+  owner: YugiYX-real
   repo: YugiClient
   releaseType: release
 

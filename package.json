@@ -4,13 +4,13 @@
   "private": true,
   "description": "Halcyon Launcher, a premium open source Minecraft launcher",
   "author": {
-    "name": "jjbkl"
+    "name": "YugiYX"
   },
   "license": "MIT",
-  "homepage": "https://github.com/jjbkl/YugiClient",
+  "homepage": "https://github.com/YugiYX-real/YugiClient",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jjbkl/YugiClient.git"
+    "url": "git+https://github.com/YugiYX-real/YugiClient.git"
   },
   "main": "out/main/index.js",
   "type": "module",

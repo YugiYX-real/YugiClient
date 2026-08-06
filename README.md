@@ -9,9 +9,9 @@
 A premium, open source Minecraft launcher for Vanilla, Fabric, Forge, NeoForge and Quilt,
 built on Electron, React and a fully typed process boundary.
 
-[![Test](https://github.com/jjbkl/YugiClient/actions/workflows/test.yml/badge.svg)](https://github.com/jjbkl/YugiClient/actions/workflows/test.yml)
-[![Build](https://github.com/jjbkl/YugiClient/actions/workflows/build.yml/badge.svg)](https://github.com/jjbkl/YugiClient/actions/workflows/build.yml)
-[![Release](https://github.com/jjbkl/YugiClient/actions/workflows/release.yml/badge.svg)](https://github.com/jjbkl/YugiClient/actions/workflows/release.yml)
+[![Test](https://github.com/YugiYX-real/YugiClient/actions/workflows/test.yml/badge.svg)](https://github.com/YugiYX-real/YugiClient/actions/workflows/test.yml)
+[![Build](https://github.com/YugiYX-real/YugiClient/actions/workflows/build.yml/badge.svg)](https://github.com/YugiYX-real/YugiClient/actions/workflows/build.yml)
+[![Release](https://github.com/YugiYX-real/YugiClient/actions/workflows/release.yml/badge.svg)](https://github.com/YugiYX-real/YugiClient/actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-7C5CFF.svg)](LICENSE)
 
 </div>
@@ -22,8 +22,7 @@ built on Electron, React and a fully typed process boundary.
 
 Most launchers make you choose between a beautiful interface and real control over your
 installation. Halcyon refuses the trade-off: an aurora-lit interface with an honest,
-tested engine underneath, no telemetry you did not ask for, and no account required to
-play offline.
+tested engine underneath and no telemetry you did not ask for.
 
 - **Fast** — parallel, resumable downloads with a concurrency-limited queue, a
   content-addressed asset store, and launch paths that verify only what actually changed.
@@ -56,11 +55,12 @@ play offline.
 
 ### Accounts and skins
 
-- Microsoft sign-in through the OAuth device code flow, refresh tokens encrypted at rest
-- Unlimited Microsoft and offline accounts, nicknames, favourites, one-click switching
-- Import and export account lists
-- Skin wardrobe with upload, history, favourites, classic and slim models, and a live
-  3D preview rendered without a WebGL dependency
+- Microsoft sign-in through OAuth with refresh tokens encrypted at rest
+- Unlimited Microsoft accounts, nicknames, favourites and one-click switching
+- Automatic background session renewal
+- In-launcher skin wardrobe with upload, history, favourites, classic and slim models
+- In-launcher owned-cape selection and cape hiding
+- Minecraft skin-face portraits throughout the account interface
 
 ### Java, downloads and diagnostics
 
@@ -87,7 +87,7 @@ play offline.
 
 ## Install
 
-Grab the latest build from [Releases](https://github.com/jjbkl/YugiClient/releases):
+Grab the latest build from [Releases](https://github.com/YugiYX-real/YugiClient/releases):
 
 | Platform | File                                                               |
 | -------- | ------------------------------------------------------------------ |
@@ -101,7 +101,7 @@ confirmation on first launch.
 ## Develop
 
 ```bash
-git clone https://github.com/jjbkl/YugiClient.git
+git clone https://github.com/YugiYX-real/YugiClient.git
 cd YugiClient
 npm install
 npm run dev
@@ -154,9 +154,10 @@ Issues and pull requests are welcome. Run `npm run verify` before opening a pull
 CI runs the same checks on Ubuntu, Windows and macOS. Please include screenshots for
 interface changes.
 
-## License
+## Author and license
 
-[MIT](LICENSE).
+Halcyon Launcher and its packages are authored and copyrighted solely by **YugiYX**.
+The project is distributed under the [MIT License](LICENSE).
 
 Halcyon is an independent project. It is not affiliated with, endorsed by or sponsored by
 Mojang Studios or Microsoft. Minecraft is a trademark of Mojang Studios. Modrinth is a
