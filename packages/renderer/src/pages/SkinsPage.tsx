@@ -120,7 +120,9 @@ export function SkinsPage(): JSX.Element {
 								<Badge>{active.model}</Badge>
 								<Badge>{active.source}</Badge>
 								{active.appliedAt === null ? null : (
-									<Badge tone="success">applied {formatDate(active.appliedAt)}</Badge>
+									<Badge tone="success">
+										applied {formatDate(active.appliedAt)}
+									</Badge>
 								)}
 							</div>
 							<div className="row wrap" style={{ marginTop: 12 }}>
@@ -160,7 +162,10 @@ export function SkinsPage(): JSX.Element {
 				</Card>
 
 				<Card>
-					<SectionHeader title="Skin wardrobe" subtitle={`${entries.length} saved skins`} />
+					<SectionHeader
+						title="Skin wardrobe"
+						subtitle={`${entries.length} saved skins`}
+					/>
 					<DropZone
 						label="Drop a 64x64 skin PNG here"
 						onFiles={(paths) => {
@@ -204,7 +209,9 @@ export function SkinsPage(): JSX.Element {
 											background: "var(--surface-3)",
 										}}
 									/>
-									<div style={{ marginTop: 8, fontSize: "0.8rem" }}>{entry.name}</div>
+									<div style={{ marginTop: 8, fontSize: "0.8rem" }}>
+										{entry.name}
+									</div>
 									{entry.favorite ? <Badge tone="accent">favourite</Badge> : null}
 								</button>
 							))}
