@@ -15,9 +15,10 @@ permissions:
 jobs:
   prettier:
     name: Apply Prettier
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.RUNNER_LABELS || '["self-hosted","Windows"]') }}
     steps:
       - name: Use unix line endings for every checkout
+        shell: bash
         run: |
           git config --global core.autocrlf false
           git config --global core.eol lf
@@ -39,6 +40,7 @@ jobs:
         run: npm run format
 
       - name: Commit formatting
+        shell: bash
         run: |
           if git diff --quiet; then
             echo "Every tracked file already matches the Prettier configuration."
