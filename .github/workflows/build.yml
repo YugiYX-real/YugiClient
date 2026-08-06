@@ -20,7 +20,7 @@ env:
 jobs:
   bundle:
     name: Bundle and test
-    runs-on: ${{ fromJSON(vars.RUNNER_LABELS || '["self-hosted","Windows"]') }}
+    runs-on: ${{ fromJSON(vars.RUNNER_LABELS || '"ubuntu-latest"') }}
     steps:
       - name: Use unix line endings for every checkout
         shell: bash
@@ -69,7 +69,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(vars.BINARY_MATRIX || '{"include":[{"label":"windows","flag":"--win","runner":["self-hosted","Windows"]}]}') }}
+      matrix: ${{ fromJSON(vars.BINARY_MATRIX || '{"include":[{"label":"windows","flag":"--win","runner":"windows-latest"},{"label":"linux","flag":"--linux","runner":"ubuntu-latest"},{"label":"macos","flag":"--mac","runner":"macos-latest"}]}') }}
     steps:
       - name: Use unix line endings for every checkout
         shell: bash
