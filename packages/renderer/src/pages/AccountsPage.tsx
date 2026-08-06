@@ -181,7 +181,10 @@ export function AccountsPage(): JSX.Element {
 											icon="skins"
 											title="Edit skin and cape"
 											onClick={() => {
-												void invoke("app:openExternal", MINECRAFT_APPEARANCE_URL)
+												void invoke(
+													"app:openExternal",
+													MINECRAFT_APPEARANCE_URL,
+												)
 											}}
 										/>
 										<Button
