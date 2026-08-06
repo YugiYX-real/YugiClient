@@ -1,4 +1,4 @@
 {
-  "requestedAt": "2026-08-06T04:39:00Z",
-  "reason": "Verify the App command syntax fix through lint, typecheck, tests and build"
+  "requestedAt": "2026-08-06T14:38:00Z",
+  "reason": "Verify skin portraits, cape rendering, Modrinth artwork hydration, fixed navigation, instance icon editing and instance-scoped Discover through lint, typecheck, tests and build"
 }
