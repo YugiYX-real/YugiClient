@@ -78,12 +78,20 @@ function avatarFor(uuid: string): string {
 }
 
 /**
- * Mojang still hands out skin and cape textures as plain http URLs. The
- * renderer only loads secure images, so the same texture is requested over
- * https before it is stored on the account.
+ * Mojang still hands out skin and cape textures over an insecure scheme. The
+ * renderer only loads secure images, so the scheme is upgraded before the
+ * texture is stored on the account.
  */
 export function secureTextureUrl(url: string): string {
-	return url.startsWith("http://") ? `https://${url.slice("http://".length)}` : url
+	try {
+		const parsed = new URL(url)
+		if (parsed.protocol === "http:") {
+			parsed.protocol = "https:"
+		}
+		return parsed.toString()
+	} catch {
+		return url
+	}
 }
 
 function publish(account: StoredAccount): Account {
