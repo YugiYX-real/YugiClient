@@ -1,11 +1,6 @@
 name: Diagnostic verification
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/diagnose.json"
-      - ".github/workflows/diagnose.yml"
   workflow_dispatch:
 
 concurrency:
@@ -41,15 +36,14 @@ jobs:
             npm run build
           ) 2>&1 | tee diagnostic.log
 
-      - name: Publish diagnostic report
-        if: always()
+      - name: Publish failure report
+        if: steps.diagnostic.outcome != 'success'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OUTCOME: ${{ steps.diagnostic.outcome }}
         shell: bash
         run: |
           {
-            echo "Automated verification for commit \`${GITHUB_SHA}\` finished with **${OUTCOME}**."
+            echo "Automated verification for commit \`${GITHUB_SHA}\` failed."
             echo
             echo '```text'
             if [ -f diagnostic.log ]; then
@@ -61,7 +55,7 @@ jobs:
             echo '```'
           } > diagnostic-issue.md
           gh issue create \
-            --title "CI diagnostic ${GITHUB_SHA::7} (${OUTCOME})" \
+            --title "CI diagnostic ${GITHUB_SHA::7} (failure)" \
             --body-file diagnostic-issue.md
 
       - name: Preserve failure status

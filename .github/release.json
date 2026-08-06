@@ -1,5 +1,5 @@
 {
-  "tag": "v1.0.6",
-  "requestedAt": "2026-08-06T04:26:00Z",
-  "summary": "Microsoft-only accounts, in-launcher capes, stable navigation, Modrinth instance targeting, custom instance artwork, private update authentication, and YugiYX ownership metadata"
+  "tag": "v1.0.7",
+  "requestedAt": "2026-08-06T04:43:00Z",
+  "summary": "Verified Microsoft-only accounts, automatic session renewal, in-launcher skins and capes, stable navigation, instance-aware Modrinth discovery, custom instance artwork, private update authentication, and YugiYX ownership metadata"
 }
