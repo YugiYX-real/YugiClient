@@ -4,8 +4,12 @@ import type { HttpClient } from "../infra/http.ts"
 const AUTHORIZE_URL = "https://login.live.com/oauth20_authorize.srf"
 const TOKEN_URL = "https://login.live.com/oauth20_token.srf"
 const REDIRECT_URL = "https://login.live.com/oauth20_desktop.srf"
-const SCOPE = "XboxLive.signin offline_access"
 const PARTITION = "persist:halcyon-microsoft"
+
+// The legacy endpoints issue a ticket for the relying party named in the scope. Xbox
+// Live only accepts a ticket minted for itself, so the v2.0 style "XboxLive.signin
+// offline_access" scope yields a token that user/authenticate answers with 401.
+const SCOPE = "service::user.auth.xboxlive.com::MBI_SSL"
 
 export type LiveTokens = {
 	readonly access_token: string
