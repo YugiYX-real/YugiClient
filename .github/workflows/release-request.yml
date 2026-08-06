@@ -21,7 +21,7 @@ permissions:
 jobs:
   tag:
     name: Create the release tag
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.RUNNER_LABELS || '["self-hosted","Windows"]') }}
     outputs:
       tag: ${{ steps.resolve.outputs.tag }}
     steps:
@@ -29,6 +29,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
       - name: Resolve the requested tag
         id: resolve
