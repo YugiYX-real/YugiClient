@@ -161,6 +161,14 @@ export function App(): JSX.Element {
 				},
 			},
 			{
+				id: "action-edit-appearance",
+				label: "Edit skin and cape",
+				icon: "skins",
+				run: () => {
+					navigate("skins")
+				},
+			},
+			{
 				id: "action-toggle-theme",
 				label: "Switch theme",
 				icon: "sparkle",
@@ -307,12 +315,21 @@ export function App(): JSX.Element {
 							onBack={() => {
 								navigate("instances")
 							}}
+							onDiscover={(id) => {
+								navigate("discover", id)
+							}}
 						/>
 					) : null}
 					{route === "discover" ? (
 						<DiscoverPage initialInstanceId={instanceId ?? undefined} />
 					) : null}
-					{route === "accounts" ? <AccountsPage /> : null}
+					{route === "accounts" ? (
+						<AccountsPage
+							onEditAppearance={() => {
+								navigate("skins")
+							}}
+						/>
+					) : null}
 					{route === "skins" ? <SkinsPage /> : null}
 					{route === "java" ? <JavaPage /> : null}
 					{route === "downloads" ? <DownloadsPage /> : null}
