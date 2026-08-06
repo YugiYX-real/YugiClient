@@ -67,7 +67,21 @@ const CONTENT_LABELS: Record<ContentKind, string> = {
 	datapack: "Datapacks",
 }
 
-function ContentTab({ instanceId, kind }: { instanceId: string; kind: ContentKind }): JSX.Element {
+/** Turns an absolute path on disk into a file url the renderer can display. */
+function localImageUrl(path: string): string {
+	const normalized = path.replaceAll("\\", "/")
+	return encodeURI(normalized.startsWith("/") ? `file://${normalized}` : `file:///${normalized}`)
+}
+
+function ContentTab({
+	instanceId,
+	kind,
+	onDiscover,
+}: {
+	instanceId: string
+	kind: ContentKind
+	onDiscover?: (instanceId: string) => void
+}): JSX.Element {
 	const entries = useAsync<readonly ContentEntry[]>(
 		() => invoke("content:list", instanceId, kind),
 		[instanceId, kind],
@@ -100,6 +114,12 @@ function ContentTab({ instanceId, kind }: { instanceId: string; kind: ContentKin
 
 	const updatable = (entries.data ?? []).filter((entry) => entry.updateAvailable)
 
+	const discover = (): void => {
+		if (onDiscover !== undefined) {
+			onDiscover(instanceId)
+		}
+	}
+
 	const run = async (action: () => Promise<unknown>): Promise<void> => {
 		setBusy(true)
 		try {
@@ -122,6 +142,11 @@ function ContentTab({ instanceId, kind }: { instanceId: string; kind: ContentKin
 	return (
 		<div className="col" style={{ gap: 16 }}>
 			<div className="row wrap">
+				{onDiscover === undefined ? null : (
+					<Button size="small" variant="primary" icon="plus" onClick={discover}>
+						Discover
+					</Button>
+				)}
 				<SearchInput
 					value={search}
 					onChange={setSearch}
@@ -299,7 +324,14 @@ function ContentTab({ instanceId, kind }: { instanceId: string; kind: ContentKin
 				<EmptyState
 					icon="cube"
 					title={`No ${CONTENT_LABELS[kind].toLowerCase()} installed`}
-					description="Install from Discover, drop files above, or import them manually."
+					description="Browse Discover to install from Modrinth, drop files above, or import them manually."
+					action={
+						onDiscover === undefined ? undefined : (
+							<Button variant="primary" icon="plus" onClick={discover}>
+								Discover {CONTENT_LABELS[kind].toLowerCase()}
+							</Button>
+						)
+					}
 				/>
 			) : (
 				<div className="list">
@@ -319,9 +351,19 @@ function ContentTab({ instanceId, kind }: { instanceId: string; kind: ContentKin
 								}}
 							/>
 							{entry.iconUrl === null ? (
-								<div className="mod-art" />
+								<div
+									className="mod-art"
+									style={{ display: "grid", placeItems: "center" }}
+								>
+									<Icon name="cube" size={18} />
+								</div>
 							) : (
-								<img className="mod-art" src={entry.iconUrl} alt="" />
+								<img
+									className="mod-art"
+									src={entry.iconUrl}
+									alt=""
+									loading="lazy"
+								/>
 							)}
 							<div className="col" style={{ gap: 2, flex: 1, minWidth: 0 }}>
 								<div className="row" style={{ gap: 8 }}>
@@ -592,6 +634,99 @@ function VersionChangeModal({
 	)
 }
 
+function IconModal({
+	instance,
+	onPatch,
+	onClose,
+}: {
+	instance: InstanceSummary
+	onPatch: (patch: InstancePatch) => void
+	onClose: () => void
+}): JSX.Element {
+	const [emoji, setEmoji] = useState(instance.icon ?? "")
+
+	const pickPicture = async (): Promise<void> => {
+		const path = await invoke("settings:pickImage")
+		if (path !== null) {
+			onPatch({ background: path })
+		}
+	}
+
+	return (
+		<Modal
+			title="Change instance icon"
+			subtitle="Use a picture from your computer, or any emoji"
+			onClose={onClose}
+			footer={
+				<>
+					<Button variant="ghost" onClick={onClose}>
+						Cancel
+					</Button>
+					<Button
+						variant="primary"
+						icon="check"
+						onClick={() => {
+							onPatch({ icon: emoji.trim() === "" ? null : emoji.trim() })
+							onClose()
+						}}
+					>
+						Save
+					</Button>
+				</>
+			}
+		>
+			<div className="row" style={{ alignItems: "center", gap: 14 }}>
+				<div
+					className="avatar"
+					style={{
+						width: 72,
+						height: 72,
+						fontSize: "1.8rem",
+						flex: "none",
+						...(instance.background === null
+							? {}
+							: {
+									backgroundImage: `url("${localImageUrl(instance.background)}")`,
+									backgroundSize: "cover",
+									backgroundPosition: "center",
+								}),
+					}}
+				>
+					{instance.background === null ? (emoji === "" ? "◆" : emoji) : null}
+				</div>
+				<div className="col" style={{ flex: 1, minWidth: 0 }}>
+					<div className="row wrap">
+						<Button
+							icon="upload"
+							onClick={() => {
+								void pickPicture()
+							}}
+						>
+							Choose picture
+						</Button>
+						{instance.background === null ? null : (
+							<Button
+								variant="ghost"
+								icon="trash"
+								onClick={() => {
+									onPatch({ background: null })
+								}}
+							>
+								Remove picture
+							</Button>
+						)}
+					</div>
+					<small>A picture always wins over the emoji.</small>
+				</div>
+			</div>
+
+			<Field label="Emoji" hint="Used when no picture is set">
+				<TextInput value={emoji} onChange={setEmoji} placeholder="◆" />
+			</Field>
+		</Modal>
+	)
+}
+
 function BackupsTab({ instanceId }: { instanceId: string }): JSX.Element {
 	const backups = useAsync<readonly BackupEntry[]>(
 		() => invoke("instances:backups", instanceId),
@@ -723,7 +858,7 @@ function LogsTab({ instanceId }: { instanceId: string }): JSX.Element {
 	})
 
 	return (
-		<div className="col" style={{ gap: 14, flex: 1 }}>
+		<div className="col" style={{ gap: 14, flex: 1, minWidth: 0 }}>
 			<div className="row wrap">
 				<SearchInput value={search} onChange={setSearch} placeholder="Filter log lines" />
 				<span className="spacer" />
@@ -837,9 +972,11 @@ function LogsTab({ instanceId }: { instanceId: string }): JSX.Element {
 function SettingsTab({
 	instance,
 	onPatch,
+	onChangeIcon,
 }: {
 	instance: InstanceSummary
 	onPatch: (patch: InstancePatch) => void
+	onChangeIcon: () => void
 }): JSX.Element {
 	const runtimes = useAsync<readonly JavaRuntime[]>(() => invoke("java:list"), [])
 	const [jvmArgs, setJvmArgs] = useState(instance.jvmArgs)
@@ -874,13 +1011,18 @@ function SettingsTab({
 							}}
 						/>
 					</Field>
-					<Field label="Icon" hint="Any emoji works as an instance icon">
-						<TextInput
-							value={instance.icon ?? ""}
-							onChange={(value) => {
-								onPatch({ icon: value === "" ? null : value })
-							}}
-						/>
+					<Field label="Icon" hint="An emoji, or a picture from your computer">
+						<div className="row">
+							<TextInput
+								value={instance.icon ?? ""}
+								onChange={(value) => {
+									onPatch({ icon: value === "" ? null : value })
+								}}
+							/>
+							<Button size="small" onClick={onChangeIcon}>
+								Change picture
+							</Button>
+						</div>
 					</Field>
 					<Field label="Group" hint="Group instances to organise large collections">
 						<TextInput
@@ -902,7 +1044,7 @@ function SettingsTab({
 								})
 							}}
 						>
-							Choose background
+							Choose picture
 						</Button>
 						{instance.background === null ? null : (
 							<Button
@@ -1061,9 +1203,11 @@ function SettingsTab({
 export function InstanceDetailPage({
 	instanceId,
 	onBack,
+	onDiscover,
 }: {
 	instanceId: string
 	onBack: () => void
+	onDiscover?: (instanceId: string) => void
 }): JSX.Element {
 	const instance = useAsync<InstanceSummary | null>(
 		() => invoke("instances:get", instanceId),
@@ -1071,6 +1215,7 @@ export function InstanceDetailPage({
 	)
 	const [tab, setTab] = useState<TabKey>("overview")
 	const [changing, setChanging] = useState(false)
+	const [editingIcon, setEditingIcon] = useState(false)
 	const [report, setReport] = useState<VerificationReport | null>(null)
 	const [progressLabel, setProgressLabel] = useState<string | null>(null)
 	const [progressFraction, setProgressFraction] = useState(0)
@@ -1133,28 +1278,38 @@ export function InstanceDetailPage({
 	const patch = (values: InstancePatch): void => {
 		void invoke("instances:update", current.id, values).then(instance.reload)
 	}
+	const openIconEditor = (): void => {
+		setEditingIcon(true)
+	}
 
 	return (
 		<>
 			<div className="row wrap">
 				<Button icon="chevron" variant="ghost" onClick={onBack} title="Back" />
-				<div
+				<button
+					type="button"
 					className="avatar"
+					title="Change icon"
+					onClick={openIconEditor}
 					style={{
 						width: 46,
 						height: 46,
 						fontSize: "1.2rem",
+						flex: "none",
+						border: "none",
+						cursor: "pointer",
 						...(current.background === null
 							? {}
 							: {
-									backgroundImage: `url("file://${current.background}")`,
+									backgroundImage: `url("${localImageUrl(current.background)}")`,
 									backgroundSize: "cover",
+									backgroundPosition: "center",
 								}),
 					}}
 				>
 					{current.background === null ? (current.icon ?? "◆") : null}
-				</div>
-				<div className="col" style={{ gap: 2 }}>
+				</button>
+				<div className="col" style={{ gap: 2, minWidth: 0 }}>
 					<h1>{current.name}</h1>
 					<small>
 						{current.gameVersion} · {current.loader}
@@ -1164,6 +1319,9 @@ export function InstanceDetailPage({
 					</small>
 				</div>
 				<span className="spacer" />
+				<Button icon="sparkle" onClick={openIconEditor}>
+					Change icon
+				</Button>
 				<Button
 					icon="cube"
 					onClick={() => {
@@ -1310,14 +1468,18 @@ export function InstanceDetailPage({
 				</div>
 			) : null}
 
-			{tab === "mods" ? <ContentTab instanceId={current.id} kind="mod" /> : null}
+			{tab === "mods" ? (
+				<ContentTab instanceId={current.id} kind="mod" onDiscover={onDiscover} />
+			) : null}
 			{tab === "resourcepacks" ? (
-				<ContentTab instanceId={current.id} kind="resourcepack" />
+				<ContentTab instanceId={current.id} kind="resourcepack" onDiscover={onDiscover} />
 			) : null}
 			{tab === "shaderpacks" ? (
-				<ContentTab instanceId={current.id} kind="shaderpack" />
+				<ContentTab instanceId={current.id} kind="shaderpack" onDiscover={onDiscover} />
 			) : null}
-			{tab === "datapacks" ? <ContentTab instanceId={current.id} kind="datapack" /> : null}
+			{tab === "datapacks" ? (
+				<ContentTab instanceId={current.id} kind="datapack" onDiscover={onDiscover} />
+			) : null}
 
 			{tab === "worlds" ? (
 				(worlds.data ?? []).length === 0 ? (
@@ -1376,7 +1538,7 @@ export function InstanceDetailPage({
 									openPath(shot.filePath)
 								}}
 							>
-								<img src={`file://${shot.filePath}`} alt={shot.fileName} />
+								<img src={localImageUrl(shot.filePath)} alt={shot.fileName} />
 							</button>
 						))}
 					</div>
@@ -1385,7 +1547,19 @@ export function InstanceDetailPage({
 
 			{tab === "backups" ? <BackupsTab instanceId={current.id} /> : null}
 			{tab === "logs" ? <LogsTab instanceId={current.id} /> : null}
-			{tab === "settings" ? <SettingsTab instance={current} onPatch={patch} /> : null}
+			{tab === "settings" ? (
+				<SettingsTab instance={current} onPatch={patch} onChangeIcon={openIconEditor} />
+			) : null}
+
+			{editingIcon ? (
+				<IconModal
+					instance={current}
+					onPatch={patch}
+					onClose={() => {
+						setEditingIcon(false)
+					}}
+				/>
+			) : null}
 
 			{changing ? (
 				<VersionChangeModal
