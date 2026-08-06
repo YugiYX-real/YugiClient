@@ -77,6 +77,15 @@ function avatarFor(uuid: string): string {
 	return AVATAR_BASE_URL + trimmed + "?size=64&overlay"
 }
 
+/**
+ * Mojang still hands out skin and cape textures as plain http URLs. The
+ * renderer only loads secure images, so the same texture is requested over
+ * https before it is stored on the account.
+ */
+export function secureTextureUrl(url: string): string {
+	return url.startsWith("http://") ? `https://${url.slice("http://".length)}` : url
+}
+
 function publish(account: StoredAccount): Account {
 	return {
 		id: account.id,
@@ -87,8 +96,8 @@ function publish(account: StoredAccount): Account {
 		favorite: account.favorite,
 		selected: account.selected,
 		avatarUrl: account.avatarUrl,
-		skinUrl: account.skinUrl,
-		capes: account.capes,
+		skinUrl: account.skinUrl === null ? null : secureTextureUrl(account.skinUrl),
+		capes: account.capes.map(secureTextureUrl),
 		expiresAt: account.expiresAt,
 		lastUsedAt: account.lastUsedAt,
 	}
@@ -313,6 +322,7 @@ export class AuthService {
 		const { accounts: storedAccounts } = await this.store.read()
 		const accounts = microsoftAccounts(storedAccounts)
 		const existing = accounts.find((account) => account.uuid === profile.id)
+		const activeSkin = profile.skins?.find((skin) => skin.state === "ACTIVE")?.url
 
 		const account: StoredAccount = {
 			id: existing?.id ?? randomUUID(),
@@ -323,8 +333,8 @@ export class AuthService {
 			favorite: existing?.favorite ?? false,
 			selected: true,
 			avatarUrl: avatarFor(profile.id),
-			skinUrl: profile.skins?.find((skin) => skin.state === "ACTIVE")?.url ?? null,
-			capes: (profile.capes ?? []).map((cape) => cape.url),
+			skinUrl: activeSkin === undefined ? null : secureTextureUrl(activeSkin),
+			capes: (profile.capes ?? []).map((cape) => secureTextureUrl(cape.url)),
 			expiresAt: new Date(Date.now() + minecraft.expires_in * 1000).toISOString(),
 			lastUsedAt: new Date().toISOString(),
 			accessToken: minecraft.access_token,
