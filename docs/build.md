@@ -83,12 +83,12 @@ against semantic versioning and rewrites `package.json`.
 
 ## Optional environment variables
 
-| Variable                       | Effect                                                                                                                                         |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `HALCYON_MSA_CLIENT_ID`        | Azure application (client) ID used for Microsoft sign-in. Falls back to the public Minecraft launcher client id, which works for personal use. |
-| `HALCYON_DISCORD_CLIENT_ID`    | Enables Discord Rich Presence. Presence stays disabled when unset.                                                                             |
-| `HALCYON_GITHUB_TOKEN`         | Lets an installed launcher read this private repository's releases. The token stays in the process environment and is never bundled or saved.  |
-| `GH_TOKEN`                     | Only needed when publishing releases locally; CI supplies `secrets.GITHUB_TOKEN`.                                                              |
+| Variable                    | Effect                                                                                                                                         |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `HALCYON_MSA_CLIENT_ID`     | Azure application (client) ID used for Microsoft sign-in. Falls back to the public Minecraft launcher client id, which works for personal use. |
+| `HALCYON_DISCORD_CLIENT_ID` | Enables Discord Rich Presence. Presence stays disabled when unset.                                                                             |
+| `HALCYON_GITHUB_TOKEN`      | Lets an installed launcher read this private repository's releases. The token stays in the process environment and is never bundled or saved.  |
+| `GH_TOKEN`                  | Only needed when publishing releases locally; CI supplies `secrets.GITHUB_TOKEN`.                                                              |
 
 ### Accessing private launcher updates
 
