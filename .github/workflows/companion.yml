@@ -1,0 +1,101 @@
+name: Companion mod
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "companion/**"
+      - ".github/workflows/companion.yml"
+
+concurrency:
+  group: companion-mod
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  build:
+    name: Build the Fabric companion mod
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10"
+
+      - name: Build the mod
+        id: companion
+        continue-on-error: true
+        shell: bash
+        working-directory: companion
+        run: |
+          set -eo pipefail
+          gradle build --no-daemon --stacktrace 2>&1 | tee ../companion.log
+
+      - name: Publish failure report
+        if: steps.companion.outcome != 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          {
+            echo "The companion mod build for commit \`${GITHUB_SHA}\` failed."
+            echo
+            echo '```text'
+            if [ -f companion.log ]; then
+              tail -c 60000 companion.log
+            else
+              echo "The build did not create a log."
+            fi
+            echo
+            echo '```'
+          } > companion-issue.md
+          gh issue create \
+            --title "Companion build ${GITHUB_SHA::7} (failure)" \
+            --body-file companion-issue.md
+
+      - name: Publish success report
+        if: steps.companion.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          {
+            echo "The companion mod build for commit \`${GITHUB_SHA}\` succeeded."
+            echo
+            echo '```text'
+            ls -l companion/build/libs
+            echo
+            tail -c 8000 companion.log
+            echo
+            echo '```'
+          } > companion-issue.md
+          gh issue create \
+            --title "Companion build ${GITHUB_SHA::7} (success)" \
+            --body-file companion-issue.md
+
+      - name: Upload the mod jar
+        if: steps.companion.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: halcyon-companion
+          path: companion/build/libs/*.jar
+          if-no-files-found: warn
+
+      - name: Preserve failure status
+        if: steps.companion.outcome != 'success'
+        shell: bash
+        run: exit 1
