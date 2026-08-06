@@ -40,7 +40,7 @@ import { DEFAULT_VERSION_META, VersionService } from "./services/version-service
 import type { VersionMetaState } from "./services/version-service.ts"
 import { VersionChangeService } from "./services/version-change-service.ts"
 
-const REPOSITORY_URL = "https://github.com/jjbkl/YugiClient"
+const REPOSITORY_URL = "https://github.com/YugiYX-real/YugiClient"
 const USER_AGENT_PREFIX = "Halcyon/"
 
 export type Container = {
