@@ -1,0 +1,70 @@
+name: Diagnostic verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/diagnose.json"
+      - ".github/workflows/diagnose.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: diagnostic-verification
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  verify:
+    name: Capture verification output
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run install, verification and build
+        id: diagnostic
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -eo pipefail
+          (
+            npm install --no-audit --no-fund
+            npm run verify
+            npm run build
+          ) 2>&1 | tee diagnostic.log
+
+      - name: Publish diagnostic report
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OUTCOME: ${{ steps.diagnostic.outcome }}
+        shell: bash
+        run: |
+          {
+            echo "Automated verification for commit \`${GITHUB_SHA}\` finished with **${OUTCOME}**."
+            echo
+            echo '```text'
+            if [ -f diagnostic.log ]; then
+              tail -c 60000 diagnostic.log
+            else
+              echo "The diagnostic command did not create a log."
+            fi
+            echo
+            echo '```'
+          } > diagnostic-issue.md
+          gh issue create \
+            --title "CI diagnostic ${GITHUB_SHA::7} (${OUTCOME})" \
+            --body-file diagnostic-issue.md
+
+      - name: Preserve failure status
+        if: steps.diagnostic.outcome != 'success'
+        shell: bash
+        run: exit 1
