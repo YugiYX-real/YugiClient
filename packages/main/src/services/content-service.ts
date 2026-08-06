@@ -235,8 +235,7 @@ export class ContentService {
 				(candidate) => baseName(candidate.fileName) === baseName(fileName),
 			)
 			const base =
-				existing ??
-				(await this.readJarMetadata(join(directory, fileName), fileName, kind))
+				existing ?? (await this.readJarMetadata(join(directory, fileName), fileName, kind))
 			const version = matches.get(hash)
 
 			if (version === undefined) {
