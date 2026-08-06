@@ -1,4 +1,4 @@
 {
-  "requestedAt": "2026-08-06T15:26:00Z",
-  "reason": "Verify instance pictures in recently played and favourites, and the tab strip layout fix"
+  "requestedAt": "2026-08-06T18:25:00Z",
+  "reason": "First run on the self hosted Windows runner: proves the runner picks up jobs, the node API reporter replaces the gh cli, and the dashboard artwork and tab strip fixes still verify"
 }
