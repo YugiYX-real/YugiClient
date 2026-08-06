@@ -15,6 +15,7 @@ import {
 	TextInput,
 } from "../components/primitives.tsx"
 import { SkinPreview } from "../components/SkinPreview.tsx"
+import { CapePreview } from "../components/CapePreview.tsx"
 import { invoke } from "../lib/client.ts"
 import { useAsync, useIpcEvent } from "../lib/hooks.ts"
 import { formatDate } from "../lib/format.ts"
@@ -241,16 +242,9 @@ export function SkinsPage(): JSX.Element {
 					<div className="row wrap" style={{ marginTop: 14, alignItems: "stretch" }}>
 						{selectedAccount.capes.map((capeUrl, index) => (
 							<Card key={capeUrl} flat>
-								<img
-									src={capeUrl}
-									alt={`Cape ${index + 1}`}
-									style={{
-										width: 96,
-										height: 64,
-										objectFit: "contain",
-										imageRendering: "pixelated",
-									}}
-								/>
+								<div className="row" style={{ justifyContent: "center" }}>
+									<CapePreview capeUrl={capeUrl} scale={7} />
+								</div>
 								<Button
 									block
 									size="small"
