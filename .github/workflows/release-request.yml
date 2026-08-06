@@ -21,7 +21,7 @@ permissions:
 jobs:
   tag:
     name: Create the release tag
-    runs-on: ${{ fromJSON(vars.RUNNER_LABELS || '["self-hosted","Windows"]') }}
+    runs-on: ${{ fromJSON(vars.RUNNER_LABELS || '"ubuntu-latest"') }}
     outputs:
       tag: ${{ steps.resolve.outputs.tag }}
     steps:
