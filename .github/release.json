@@ -1,5 +1,5 @@
 {
-  "tag": "v1.0.7",
-  "requestedAt": "2026-08-06T04:43:00Z",
-  "summary": "Verified Microsoft-only accounts, automatic session renewal, in-launcher skins and capes, stable navigation, instance-aware Modrinth discovery, custom instance artwork, private update authentication, and YugiYX ownership metadata"
+  "tag": "v1.0.8",
+  "requestedAt": "2026-08-06T14:40:00Z",
+  "summary": "Real skin portraits on accounts, an in-launcher skin and cape editor with working cape artwork, Modrinth icons for every installed mod, a Discover button inside each instance, editable instance icons, and a sidebar that stays put on Mods, Logs and Settings"
 }
