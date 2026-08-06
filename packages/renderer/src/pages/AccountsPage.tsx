@@ -16,11 +16,7 @@ import { invoke } from "../lib/client.ts"
 import { useAsync, useIpcEvent } from "../lib/hooks.ts"
 import { formatRelative } from "../lib/format.ts"
 
-export function AccountsPage({
-	onEditAppearance,
-}: {
-	onEditAppearance?: () => void
-}): JSX.Element {
+export function AccountsPage({ onEditAppearance }: { onEditAppearance?: () => void }): JSX.Element {
 	const accounts = useAsync<readonly Account[]>(() => invoke("accounts:list"), [])
 	const [nicknaming, setNicknaming] = useState<Account | null>(null)
 	const [nickname, setNickname] = useState("")
@@ -147,12 +143,10 @@ export function AccountsPage({
 									size="small"
 									onClick={() => {
 										if (!account.selected) {
-											void invoke("accounts:select", account.id).then(
-												() => {
-													accounts.reload()
-													editAppearance()
-												},
-											)
+											void invoke("accounts:select", account.id).then(() => {
+												accounts.reload()
+												editAppearance()
+											})
 											return
 										}
 										editAppearance()
