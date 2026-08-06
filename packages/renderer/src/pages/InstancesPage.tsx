@@ -37,6 +37,11 @@ const LOADERS: readonly { value: LoaderId; label: string }[] = [
 
 type SortKey = "recent" | "name" | "playtime"
 
+function localImageUrl(path: string): string {
+	const normalized = path.replaceAll("\\", "/")
+	return encodeURI(normalized.startsWith("/") ? `file://${normalized}` : `file:///${normalized}`)
+}
+
 function CreateInstanceModal({
 	onClose,
 	onCreated,
@@ -50,6 +55,7 @@ function CreateInstanceModal({
 	const [gameVersion, setGameVersion] = useState("")
 	const [loaderVersion, setLoaderVersion] = useState("")
 	const [memoryMb, setMemoryMb] = useState(4096)
+	const [artworkPath, setArtworkPath] = useState<string | null>(null)
 	const [showSnapshots, setShowSnapshots] = useState(false)
 	const [busy, setBusy] = useState(false)
 
@@ -77,6 +83,13 @@ function CreateInstanceModal({
 			: entries.filter((entry) => entry.id.toLowerCase().includes(needle)).slice(0, 60)
 	}, [versions.data, search])
 
+	const chooseArtwork = async (): Promise<void> => {
+		const path = await invoke("settings:pickImage")
+		if (path !== null) {
+			setArtworkPath(path)
+		}
+	}
+
 	const create = async (): Promise<void> => {
 		if (gameVersion === "") {
 			return
@@ -91,7 +104,10 @@ function CreateInstanceModal({
 				install: true,
 				...(loaderVersion === "" ? {} : { loaderVersion }),
 			}
-			await invoke("instances:create", input)
+			const created = await invoke("instances:create", input)
+			if (artworkPath !== null) {
+				await invoke("instances:update", created.id, { background: artworkPath })
+			}
 			onCreated()
 			onClose()
 		} finally {
@@ -103,7 +119,7 @@ function CreateInstanceModal({
 		<Modal
 			wide
 			title="New instance"
-			subtitle="Pick a version and loader; Halcyon downloads everything in the background"
+			subtitle="Pick a version, loader and optional picture; Halcyon downloads everything in the background"
 			onClose={onClose}
 			footer={
 				<>
@@ -139,6 +155,42 @@ function CreateInstanceModal({
 					/>
 				</Field>
 			</div>
+
+			<Field label="Instance picture" hint="Choose a PNG, JPG or WebP file from your PC">
+				<div className="row wrap">
+					<div
+						className="art"
+						style={{
+							width: 112,
+							height: 68,
+							flex: "0 0 auto",
+							...(artworkPath === null
+								? {}
+								: { backgroundImage: `url("${localImageUrl(artworkPath)}")` }),
+						}}
+					>
+						{artworkPath === null ? "◆" : null}
+					</div>
+					<Button
+						icon="upload"
+						onClick={() => {
+							void chooseArtwork()
+						}}
+					>
+						{artworkPath === null ? "Choose picture" : "Change picture"}
+					</Button>
+					{artworkPath === null ? null : (
+						<Button
+							variant="ghost"
+							onClick={() => {
+								setArtworkPath(null)
+							}}
+						>
+							Remove
+						</Button>
+					)}
+				</div>
+			</Field>
 
 			<Field label="Minecraft version">
 				<div className="col">
@@ -267,6 +319,13 @@ export function InstancesPage({ onOpen }: { onOpen: (instanceId: string) => void
 		})
 	}, [instances.data, search, loaderFilter, sort])
 
+	const chooseArtwork = async (instance: InstanceSummary): Promise<void> => {
+		const path = await invoke("settings:pickImage")
+		if (path !== null) {
+			await invoke("instances:update", instance.id, { background: path })
+		}
+	}
+
 	const menuItems = (instance: InstanceSummary): readonly ContextMenuItem[] => [
 		{
 			label: instance.running ? "Stop" : "Launch",
@@ -286,6 +345,24 @@ export function InstancesPage({ onOpen }: { onOpen: (instanceId: string) => void
 				void invoke("instances:update", instance.id, { favorite: !instance.favorite })
 			},
 		},
+		{
+			label: "Change picture",
+			icon: "upload",
+			onSelect: () => {
+				void chooseArtwork(instance)
+			},
+		},
+		...(instance.background === null
+			? []
+			: [
+					{
+						label: "Remove picture",
+						icon: "close" as const,
+						onSelect: () => {
+							void invoke("instances:update", instance.id, { background: null })
+						},
+					},
+				]),
 		{
 			label: "Rename",
 			icon: "copy",
@@ -424,7 +501,7 @@ export function InstancesPage({ onOpen }: { onOpen: (instanceId: string) => void
 									instance.background === null
 										? undefined
 										: {
-												backgroundImage: `url("file://${instance.background}")`,
+												backgroundImage: `url("${localImageUrl(instance.background)}")`,
 											}
 								}
 							>
