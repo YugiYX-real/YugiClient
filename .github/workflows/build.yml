@@ -20,9 +20,10 @@ env:
 jobs:
   bundle:
     name: Bundle and test
-    runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ fromJSON(vars.RUNNER_LABELS || '["self-hosted","Windows"]') }}
     steps:
       - name: Use unix line endings for every checkout
+        shell: bash
         run: |
           git config --global core.autocrlf false
           git config --global core.eol lf
@@ -64,23 +65,14 @@ jobs:
   binaries:
     name: Binaries for ${{ matrix.label }}
     needs: bundle
-    if: ${{ vars.SKIP_BINARY_MATRIX != 'true' }}
-    runs-on: ${{ matrix.os }}
+    if: ${{ vars.SKIP_BINARY_MATRIX == 'true' && false || vars.SKIP_BINARY_MATRIX != 'true' }}
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - os: ${{ vars.WINDOWS_RUNNER || 'windows-latest' }}
-            label: windows
-            flag: --win
-          - os: ${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}
-            label: linux
-            flag: --linux
-          - os: ${{ vars.MACOS_RUNNER || 'macos-latest' }}
-            label: macos
-            flag: --mac
+      matrix: ${{ fromJSON(vars.BINARY_MATRIX || '{"include":[{"label":"windows","flag":"--win","runner":["self-hosted","Windows"]}]}') }}
     steps:
       - name: Use unix line endings for every checkout
+        shell: bash
         run: |
           git config --global core.autocrlf false
           git config --global core.eol lf
