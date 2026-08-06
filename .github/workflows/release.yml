@@ -31,7 +31,7 @@ env:
 jobs:
   prepare:
     name: Resolve version and changelog
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}
     outputs:
       tag: ${{ steps.resolve.outputs.tag }}
       version: ${{ steps.resolve.outputs.version }}
@@ -126,13 +126,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: windows-latest
+          - os: ${{ vars.WINDOWS_RUNNER || 'windows-latest' }}
             label: windows
             flag: --win
-          - os: ubuntu-latest
+          - os: ${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}
             label: linux
             flag: --linux
-          - os: macos-latest
+          - os: ${{ vars.MACOS_RUNNER || 'macos-latest' }}
             label: macos
             flag: --mac
     steps:
@@ -184,7 +184,8 @@ jobs:
   finalize:
     name: Publish the GitHub Release
     needs: [prepare, publish]
-    runs-on: ubuntu-latest
+    if: ${{ always() && needs.prepare.result == 'success' }}
+    runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -194,6 +195,16 @@ jobs:
         with:
           name: release-notes
 
+      - name: Note incomplete platform coverage
+        if: ${{ needs.publish.result != 'success' }}
+        shell: bash
+        run: |
+          {
+            echo
+            echo "> Not every platform finished building for this tag. Missing downloads will"
+            echo "> appear once that platform is rebuilt."
+          } >> RELEASE_NOTES.md
+
       - name: Publish release with generated notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -201,16 +212,14 @@ jobs:
           VERSION: ${{ needs.prepare.outputs.version }}
         shell: bash
         run: |
-          if gh release view "$TAG" > /dev/null 2>&1; then
-            gh release edit "$TAG" \
-              --title "Halcyon $VERSION" \
-              --notes-file RELEASE_NOTES.md \
-              --draft=false \
-              --latest
-          else
-            gh release create "$TAG" \
-              --title "Halcyon $VERSION" \
-              --notes-file RELEASE_NOTES.md \
-              --latest
+          ASSETS="$(gh release view "$TAG" --json assets --jq '.assets | length' 2>/dev/null || echo 0)"
+          if [ "${ASSETS}" = "0" ]; then
+            echo "::error::No assets were uploaded for ${TAG}, so the release stays a draft."
+            exit 1
           fi
+          gh release edit "$TAG" \
+            --title "Halcyon $VERSION" \
+            --notes-file RELEASE_NOTES.md \
+            --draft=false \
+            --latest
           gh release view "$TAG" --json assets --jq '.assets[].name'
