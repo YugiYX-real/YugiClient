@@ -22,6 +22,28 @@ import {
 } from "../lib/format.ts"
 import type { Navigate } from "../app/navigation.ts"
 
+function localImageUrl(filePath: string): string {
+	const normalized = filePath.replaceAll("\\", "/")
+	const prefix = normalized.startsWith("/") ? "file://" : "file:///"
+	return encodeURI(prefix + normalized)
+}
+
+function InstanceArt({ instance }: { instance: InstanceSummary }): JSX.Element {
+	if (instance.background !== null) {
+		return (
+			<div
+				className="avatar"
+				style={{
+					backgroundImage: `url("${localImageUrl(instance.background)}")`,
+					backgroundSize: "cover",
+					backgroundPosition: "center",
+				}}
+			/>
+		)
+	}
+	return <div className="avatar">{instance.icon ?? initialsOf(instance.name)}</div>
+}
+
 function InstanceRow({
 	instance,
 	onOpen,
@@ -33,7 +55,7 @@ function InstanceRow({
 }): JSX.Element {
 	return (
 		<div className="list-row">
-			<div className="avatar">{instance.icon ?? initialsOf(instance.name)}</div>
+			<InstanceArt instance={instance} />
 			<div className="col" style={{ gap: 1, flex: 1, minWidth: 0 }}>
 				<button
 					type="button"
