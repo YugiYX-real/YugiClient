@@ -1,9 +1,8 @@
 name: Test
 
-# Pushes to main are already verified by the Build workflow. With a single
-# self hosted runner every workflow queues behind the others, so this one only
-# runs for pull requests and manual checks.
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -17,8 +16,12 @@ permissions:
 
 jobs:
   verify:
-    name: Verify
-    runs-on: ${{ fromJSON(vars.RUNNER_LABELS || '["self-hosted","Windows"]') }}
+    name: Verify on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(vars.TEST_MATRIX || '["ubuntu-latest","windows-latest","macos-latest"]') }}
     steps:
       - name: Use unix line endings for every checkout
         shell: bash
