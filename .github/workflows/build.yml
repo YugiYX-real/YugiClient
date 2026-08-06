@@ -65,7 +65,7 @@ jobs:
   binaries:
     name: Binaries for ${{ matrix.label }}
     needs: bundle
-    if: ${{ vars.SKIP_BINARY_MATRIX == 'true' && false || vars.SKIP_BINARY_MATRIX != 'true' }}
+    if: ${{ vars.SKIP_BINARY_MATRIX != 'true' }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
