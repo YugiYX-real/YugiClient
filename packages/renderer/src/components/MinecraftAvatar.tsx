@@ -47,24 +47,52 @@ function PixelHead({ size }: { size: number }): JSX.Element {
 	)
 }
 
+/**
+ * Renders the face and hat layer of a Minecraft skin texture.
+ *
+ * Mojang publishes skin textures over http, so the main process rewrites them
+ * to https before they reach the renderer. When the texture cannot be reached
+ * the component falls back to the rendered avatar service and finally to a
+ * generic pixel head, never to initials.
+ */
 export function MinecraftAvatar({
 	skinUrl,
+	fallbackUrl = null,
 	size = 36,
 }: {
 	skinUrl: string | null
-	fallbackUrl: string | null
-	fallback: string
+	fallbackUrl?: string | null
 	size?: number
 }): JSX.Element {
 	const [ready, setReady] = useState(false)
 	const [failed, setFailed] = useState(false)
+	const [fallbackFailed, setFallbackFailed] = useState(false)
 
 	useEffect(() => {
 		setReady(false)
 		setFailed(false)
 	}, [skinUrl])
 
+	useEffect(() => {
+		setFallbackFailed(false)
+	}, [fallbackUrl])
+
 	if (skinUrl === null || skinUrl === "" || failed) {
+		if (fallbackUrl !== null && fallbackUrl !== "" && !fallbackFailed) {
+			return (
+				<img
+					className="avatar"
+					src={fallbackUrl}
+					alt=""
+					width={size}
+					height={size}
+					style={{ width: size, height: size, imageRendering: "pixelated" }}
+					onError={() => {
+						setFallbackFailed(true)
+					}}
+				/>
+			)
+		}
 		return <PixelHead size={size} />
 	}
 
@@ -72,7 +100,7 @@ export function MinecraftAvatar({
 	const layer = {
 		position: "absolute" as const,
 		inset: 0,
-		backgroundImage: `url(${skinUrl})`,
+		backgroundImage: `url("${skinUrl}")`,
 		backgroundRepeat: "no-repeat",
 		backgroundSize: `${textureSize}px ${textureSize}px`,
 		imageRendering: "pixelated" as const,
