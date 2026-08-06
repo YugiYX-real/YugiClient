@@ -19,7 +19,7 @@ permissions:
 jobs:
   verify:
     name: Capture verification output
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.RUNNER_LABELS || '["self-hosted","Windows"]') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -44,7 +44,7 @@ jobs:
       - name: Publish failure report
         if: steps.diagnostic.outcome != 'success'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           {
@@ -59,14 +59,15 @@ jobs:
             echo
             echo '```'
           } > diagnostic-issue.md
-          gh issue create \
-            --title "CI diagnostic ${GITHUB_SHA::7} (failure)" \
-            --body-file diagnostic-issue.md
+          node scripts/github-api.mjs \
+            issue-create \
+            "CI diagnostic ${GITHUB_SHA::7} (failure)" \
+            diagnostic-issue.md
 
       - name: Publish success report
         if: steps.diagnostic.outcome == 'success'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           {
@@ -77,9 +78,10 @@ jobs:
             echo
             echo '```'
           } > diagnostic-issue.md
-          gh issue create \
-            --title "CI diagnostic ${GITHUB_SHA::7} (success)" \
-            --body-file diagnostic-issue.md
+          node scripts/github-api.mjs \
+            issue-create \
+            "CI diagnostic ${GITHUB_SHA::7} (success)" \
+            diagnostic-issue.md
 
       - name: Preserve failure status
         if: steps.diagnostic.outcome != 'success'
