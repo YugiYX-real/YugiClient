@@ -1,5 +1,5 @@
 {
-  "tag": "v1.0.8",
-  "requestedAt": "2026-08-06T14:40:00Z",
-  "summary": "Real skin portraits on accounts, an in-launcher skin and cape editor with working cape artwork, Modrinth icons for every installed mod, a Discover button inside each instance, editable instance icons, and a sidebar that stays put on Mods, Logs and Settings"
+  "tag": "v1.0.9",
+  "requestedAt": "2026-08-06T15:02:00Z",
+  "summary": "Square instance artwork in the instances grid, wrapping toolbars and tab strips so page headers can no longer be clipped or pushed off screen, and no stray horizontal scrollbars inside pages"
 }
