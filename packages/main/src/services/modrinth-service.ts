@@ -291,7 +291,9 @@ export class ModrinthService implements ContentResolverPort {
 	 * dropped into an instance by hand were never linked to a project, so this
 	 * is the only way to recover their title, author and artwork.
 	 */
-	async versionsByHashes(hashes: readonly string[]): Promise<ReadonlyMap<string, ModrinthVersion>> {
+	async versionsByHashes(
+		hashes: readonly string[],
+	): Promise<ReadonlyMap<string, ModrinthVersion>> {
 		const matches = new Map<string, ModrinthVersion>()
 		const wanted = [...new Set(hashes)].filter((hash) => hash !== "")
 		if (wanted.length === 0) {
