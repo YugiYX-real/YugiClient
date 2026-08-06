@@ -1,0 +1,24 @@
+{
+	"schemaVersion": 1,
+	"id": "halcyon",
+	"version": "${version}",
+	"name": "Halcyon Companion",
+	"description": "The in-game half of the Halcyon launcher: player badges, HUD modules and cosmetics.",
+	"authors": ["YugiYX"],
+	"contact": {
+		"homepage": "https://github.com/YugiYX-real/YugiClient",
+		"sources": "https://github.com/YugiYX-real/YugiClient"
+	},
+	"license": "MIT",
+	"environment": "client",
+	"entrypoints": {
+		"client": ["gg.halcyon.companion.HalcyonClient"]
+	},
+	"mixins": ["halcyon.mixins.json"],
+	"depends": {
+		"fabricloader": ">=0.16.0",
+		"minecraft": "~1.21",
+		"java": ">=21",
+		"fabric-api": "*"
+	}
+}
