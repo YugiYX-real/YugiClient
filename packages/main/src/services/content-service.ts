@@ -6,12 +6,16 @@ import type { ContentEntry, ContentKind, InstallOutcome, ModAnalysis, ModIssue }
 import type { EventBus } from "../infra/events.ts"
 import type { Logger } from "../infra/logger.ts"
 import type { HttpClient } from "../infra/http.ts"
+import { sha1OfFile } from "../infra/http.ts"
 import { listFiles, readZipEntry, removePath } from "../infra/fs-extra.ts"
 import type { InstanceService } from "./instance-service.ts"
 import type { ModrinthService } from "./modrinth-service.ts"
 import { JsonStore } from "../infra/json-store.ts"
 
 const DISABLED_SUFFIX = ".disabled"
+
+/** How many unknown files are hashed and looked up during a single listing. */
+const ARTWORK_BATCH = 25
 
 export type ContentRecord = {
 	fileName: string
@@ -28,6 +32,7 @@ export type ContentRecord = {
 	dependencies: { projectId: string | null; kind: string }[]
 	latestVersionId: string | null
 	latestVersionName: string | null
+	artworkChecked?: boolean
 }
 
 export type ContentIndex = { records: ContentRecord[] }
@@ -64,6 +69,25 @@ function prettyName(fileName: string): string {
 		.replace(/[-_]/g, " ")
 		.replace(/\s+/g, " ")
 		.trim()
+}
+
+function emptyRecord(fileName: string, kind: ContentKind): ContentRecord {
+	return {
+		fileName,
+		kind,
+		projectId: null,
+		versionId: null,
+		displayName: prettyName(fileName),
+		author: null,
+		description: null,
+		iconUrl: null,
+		version: null,
+		gameVersions: [],
+		loaders: [],
+		dependencies: [],
+		latestVersionId: null,
+		latestVersionName: null,
+	}
 }
 
 type FabricModJson = {
@@ -116,6 +140,17 @@ export class ContentService {
 	}
 
 	async list(instanceId: string, kind: ContentKind): Promise<readonly ContentEntry[]> {
+		const entries = await this.collect(instanceId, kind)
+		const enriched = await this.hydrateArtwork(instanceId, kind, entries).catch(
+			(error: unknown) => {
+				this.logger.warn("Could not look up artwork for installed content", error)
+				return false
+			},
+		)
+		return enriched ? this.collect(instanceId, kind) : entries
+	}
+
+	private async collect(instanceId: string, kind: ContentKind): Promise<readonly ContentEntry[]> {
 		const directory = this.directory(instanceId, kind)
 		const files = await listFiles(directory, extensionsFor(kind))
 		const { records } = await this.index(instanceId).read()
@@ -154,27 +189,99 @@ export class ContentService {
 		return entries.sort((left, right) => left.displayName.localeCompare(right.displayName))
 	}
 
+	/**
+	 * Looks up files that still have no artwork by their sha1 hash. Modrinth
+	 * answers with the project behind the file, which gives the list a real
+	 * title, author and icon. Both hits and misses are written back so the same
+	 * file is never looked up twice.
+	 */
+	private async hydrateArtwork(
+		instanceId: string,
+		kind: ContentKind,
+		entries: readonly ContentEntry[],
+	): Promise<boolean> {
+		const { records } = await this.index(instanceId).read()
+		const pending = entries
+			.filter((entry) => entry.iconUrl === null)
+			.filter((entry) => {
+				const record = records.find(
+					(candidate) => baseName(candidate.fileName) === baseName(entry.fileName),
+				)
+				return record === undefined || record.artworkChecked !== true
+			})
+			.slice(0, ARTWORK_BATCH)
+
+		if (pending.length === 0) {
+			return false
+		}
+
+		const directory = this.directory(instanceId, kind)
+		const hashed: { fileName: string; hash: string }[] = []
+		for (const entry of pending) {
+			const hash = await sha1OfFile(join(directory, entry.fileName)).catch(() => undefined)
+			if (hash !== undefined) {
+				hashed.push({ fileName: entry.fileName, hash })
+			}
+		}
+
+		if (hashed.length === 0) {
+			return false
+		}
+
+		const matches = await this.modrinth.versionsByHashes(hashed.map((item) => item.hash))
+
+		for (const { fileName, hash } of hashed) {
+			const existing = records.find(
+				(candidate) => baseName(candidate.fileName) === baseName(fileName),
+			)
+			const base =
+				existing ??
+				(await this.readJarMetadata(join(directory, fileName), fileName, kind))
+			const version = matches.get(hash)
+
+			if (version === undefined) {
+				await this.record(instanceId, {
+					...base,
+					fileName,
+					kind,
+					artworkChecked: true,
+				})
+				continue
+			}
+
+			const project = await this.modrinth.project(version.projectId).catch(() => undefined)
+			await this.record(instanceId, {
+				...base,
+				fileName,
+				kind,
+				projectId: version.projectId,
+				versionId: version.id,
+				displayName: project?.title ?? base.displayName,
+				author: project?.author ?? base.author,
+				description: project?.description ?? base.description,
+				iconUrl: project?.iconUrl ?? null,
+				version: base.version ?? version.versionNumber,
+				gameVersions: [...version.gameVersions],
+				loaders: [...version.loaders],
+				dependencies: version.dependencies.map((dependency) => ({
+					projectId: dependency.projectId,
+					kind: dependency.kind,
+				})),
+				latestVersionId: base.latestVersionId ?? version.id,
+				latestVersionName: base.latestVersionName ?? version.versionNumber,
+				artworkChecked: true,
+			})
+		}
+
+		return true
+	}
+
 	private async readJarMetadata(
 		filePath: string,
 		fileName: string,
 		kind: ContentKind,
 	): Promise<ContentRecord> {
-		const fallback: ContentRecord = {
-			fileName,
-			kind,
-			projectId: null,
-			versionId: null,
-			displayName: prettyName(fileName),
-			author: null,
-			description: null,
-			iconUrl: null,
-			version: null,
-			gameVersions: [],
-			loaders: [],
-			dependencies: [],
-			latestVersionId: null,
-			latestVersionName: null,
-		}
+		const fallback = emptyRecord(fileName, kind)
 
 		if (kind !== "mod") {
 			return fallback
@@ -353,6 +460,7 @@ export class ContentService {
 					})),
 					latestVersionId: version.id,
 					latestVersionName: version.versionNumber,
+					artworkChecked: true,
 				})
 				installed.push(version.fileName)
 			} catch (error) {
