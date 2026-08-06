@@ -16,12 +16,8 @@ import { invoke } from "../lib/client.ts"
 import { useAsync, useIpcEvent } from "../lib/hooks.ts"
 import { formatRelative, initialsOf } from "../lib/format.ts"
 
-const MINECRAFT_APPEARANCE_URL = "https://www.minecraft.net/msaprofile/mygames/editskin"
-
 export function AccountsPage(): JSX.Element {
 	const accounts = useAsync<readonly Account[]>(() => invoke("accounts:list"), [])
-	const [offlineName, setOfflineName] = useState("")
-	const [addingOffline, setAddingOffline] = useState(false)
 	const [nicknaming, setNicknaming] = useState<Account | null>(null)
 	const [nickname, setNickname] = useState("")
 	const [removing, setRemoving] = useState<Account | null>(null)
@@ -39,7 +35,7 @@ export function AccountsPage(): JSX.Element {
 		}
 	}
 
-	const entries = accounts.data ?? []
+	const entries = (accounts.data ?? []).filter((account) => account.kind === "microsoft")
 
 	return (
 		<>
@@ -52,42 +48,17 @@ export function AccountsPage(): JSX.Element {
 						void signIn()
 					}}
 				>
-					Sign in with Microsoft
-				</Button>
-				<Button
-					icon="plus"
-					onClick={() => {
-						setAddingOffline(true)
-					}}
-				>
-					Add offline account
+					Add Microsoft account
 				</Button>
 				<span className="spacer" />
-				<Button
-					size="small"
-					icon="upload"
-					onClick={() => {
-						void invoke("accounts:export")
-					}}
-				>
-					Export
-				</Button>
-				<Button
-					size="small"
-					icon="downloads"
-					onClick={() => {
-						void invoke("accounts:import").then(accounts.reload)
-					}}
-				>
-					Import
-				</Button>
+				<Badge tone="success">Sessions renew automatically</Badge>
 			</div>
 
 			{signingIn ? (
 				<Card flat>
 					<small>
-						A secure Microsoft sign-in window opened. Finish signing in there; Halcyon
-						keeps the refresh token so your Minecraft session can renew automatically.
+						Finish signing in in the secure Microsoft window. Halcyon keeps the refresh
+						token and renews the selected Minecraft session in the background.
 					</small>
 				</Card>
 			) : null}
@@ -99,8 +70,20 @@ export function AccountsPage(): JSX.Element {
 			) : entries.length === 0 ? (
 				<EmptyState
 					icon="accounts"
-					title="No accounts yet"
-					description="Sign in with Microsoft to play online, or add an offline profile for LAN and singleplayer."
+					title="No Microsoft account connected"
+					description="Connect the Microsoft account that owns Minecraft to launch online."
+					action={
+						<Button
+							variant="primary"
+							icon="accounts"
+							busy={signingIn}
+							onClick={() => {
+								void signIn()
+							}}
+						>
+							Sign in
+						</Button>
+					}
 				/>
 			) : (
 				<div className="grid cols-3">
@@ -111,11 +94,12 @@ export function AccountsPage(): JSX.Element {
 									skinUrl={account.skinUrl}
 									fallbackUrl={account.avatarUrl}
 									fallback={initialsOf(account.username)}
-									size={44}
+									size={52}
 								/>
 								<div className="col" style={{ gap: 2, minWidth: 0, flex: 1 }}>
 									<strong>{account.nickname ?? account.username}</strong>
 									<small>{account.username}</small>
+									<small>Last used {formatRelative(account.lastUsedAt)}</small>
 								</div>
 								{account.favorite ? (
 									<Badge tone="accent" icon="star">
@@ -125,20 +109,13 @@ export function AccountsPage(): JSX.Element {
 							</div>
 
 							<div className="row wrap" style={{ marginTop: 12, gap: 6 }}>
-								<Badge tone={account.kind === "microsoft" ? "success" : "neutral"}>
-									{account.kind}
-								</Badge>
+								<Badge tone="success">Microsoft</Badge>
 								{account.selected ? <Badge tone="accent">active</Badge> : null}
+								{account.skinUrl === null ? null : <Badge>skin loaded</Badge>}
 								{account.capes.length === 0 ? null : (
-									<Badge>{account.capes.length} capes</Badge>
+									<Badge>{account.capes.length} owned capes</Badge>
 								)}
 							</div>
-							<small style={{ display: "block", marginTop: 8 }}>
-								Last used {formatRelative(account.lastUsedAt)}
-								{account.expiresAt === null
-									? ""
-									: ` · session valid until ${formatRelative(account.expiresAt)}`}
-							</small>
 
 							<div className="row wrap" style={{ marginTop: 12 }}>
 								{account.selected ? null : (
@@ -174,31 +151,6 @@ export function AccountsPage(): JSX.Element {
 										setNicknaming(account)
 									}}
 								/>
-								{account.kind === "microsoft" ? (
-									<>
-										<Button
-											size="small"
-											icon="skins"
-											title="Edit skin and cape"
-											onClick={() => {
-												void invoke(
-													"app:openExternal",
-													MINECRAFT_APPEARANCE_URL,
-												)
-											}}
-										/>
-										<Button
-											size="small"
-											icon="refresh"
-											title="Refresh session now"
-											onClick={() => {
-												void invoke("accounts:refresh", account.id).then(
-													accounts.reload,
-												)
-											}}
-										/>
-									</>
-								) : null}
 								<span className="spacer" />
 								<Button
 									size="small"
@@ -214,53 +166,6 @@ export function AccountsPage(): JSX.Element {
 					))}
 				</div>
 			)}
-
-			{addingOffline ? (
-				<Modal
-					title="Add offline account"
-					subtitle="Offline profiles work for singleplayer and LAN worlds"
-					onClose={() => {
-						setAddingOffline(false)
-					}}
-					footer={
-						<>
-							<Button
-								variant="ghost"
-								onClick={() => {
-									setAddingOffline(false)
-								}}
-							>
-								Cancel
-							</Button>
-							<Button
-								variant="primary"
-								disabled={offlineName.trim() === ""}
-								onClick={() => {
-									const username = offlineName.trim()
-									setOfflineName("")
-									setAddingOffline(false)
-									void invoke("accounts:addOffline", username).then(
-										accounts.reload,
-									)
-								}}
-							>
-								Add account
-							</Button>
-						</>
-					}
-				>
-					<Field
-						label="Username"
-						hint="3 to 16 characters, letters, numbers and underscores"
-					>
-						<TextInput
-							value={offlineName}
-							onChange={setOfflineName}
-							placeholder="Steve"
-						/>
-					</Field>
-				</Modal>
-			) : null}
 
 			{nicknaming === null ? null : (
 				<Modal
