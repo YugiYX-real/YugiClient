@@ -1,9 +1,8 @@
 // Minimal GitHub REST helper for continuous integration.
 //
-// The gh command line tool ships with GitHub hosted runners but not with self
-// hosted machines, so every automation step goes through this script instead.
-// Node is always installed by the workflow, which makes this the one dependency
-// that is guaranteed to exist on any runner.
+// The gh command line tool is not guaranteed on every runner, so every
+// automation step goes through this script instead. Node is always installed by
+// the workflow, which makes it the one dependency that always exists.
 //
 // Usage:
 //   node scripts/github-api.mjs release-reserve v1.2.3 "Halcyon 1.2.3" NOTES.md
@@ -14,6 +13,8 @@ import { readFileSync } from "node:fs"
 import process from "node:process"
 
 const API_ROOT = "https://api.github.com"
+const PAGE_SIZE = 100
+const MAX_PAGES = 10
 
 const authToken = () => {
 	const value = process.env.GITHUB_TOKEN || process.env.GH_TOKEN
@@ -65,12 +66,68 @@ const requireOk = (result, description) => {
 	return result.body
 }
 
+const assetCount = (release) => (Array.isArray(release.assets) ? release.assets.length : 0)
+
+// The "get a release by tag name" endpoint deliberately ignores drafts, because
+// a draft has no git tag yet. Reserved releases are drafts, so they can only be
+// discovered by listing every release and matching on tag_name.
+const listReleases = async () => {
+	const releases = []
+	for (let page = 1; page <= MAX_PAGES; page += 1) {
+		const path =
+			repositoryPath() + "/releases?per_page=" + String(PAGE_SIZE) + "&page=" + String(page)
+		const batch = requireOk(await request("GET", path), "Listing releases")
+		if (!Array.isArray(batch) || batch.length === 0) {
+			break
+		}
+		for (const release of batch) {
+			releases.push(release)
+		}
+		if (batch.length < PAGE_SIZE) {
+			break
+		}
+	}
+	return releases
+}
+
+// A tag can end up with more than one release when an earlier run failed part
+// way through. Prefer an already published release, then the draft that carries
+// the most assets, so nothing that was uploaded is ever thrown away.
+const rankRelease = (release) => (release.draft ? assetCount(release) : 1000000 + assetCount(release))
+
+const matchingReleases = async (tag) => {
+	const all = await listReleases()
+	const matches = all.filter((release) => String(release.tag_name) === tag)
+	return matches.sort((left, right) => rankRelease(right) - rankRelease(left))
+}
+
 const findRelease = async (tag) => {
+	const matches = await matchingReleases(tag)
+	if (matches.length > 0) {
+		return matches[0]
+	}
+
+	// Fall back to the direct lookup in case the list was truncated.
 	const result = await request("GET", repositoryPath() + "/releases/tags/" + encodeURIComponent(tag))
 	if (result.status === 404) {
 		return null
 	}
 	return requireOk(result, "Looking up release " + tag)
+}
+
+const discardStaleDrafts = async (tag, keepId) => {
+	const matches = await matchingReleases(tag)
+	for (const release of matches) {
+		if (release.id === keepId || !release.draft || assetCount(release) > 0) {
+			continue
+		}
+		const result = await request("DELETE", repositoryPath() + "/releases/" + String(release.id))
+		if (result.status >= 400) {
+			console.log("Could not remove the stale draft " + String(release.id) + ", continuing.")
+			continue
+		}
+		console.log("Removed the stale empty draft " + String(release.id) + ".")
+	}
 }
 
 const readNotes = (notesFile) => {
@@ -115,11 +172,13 @@ const releaseReserve = async (tag, title, notesFile) => {
 			}),
 			"Updating release " + tag,
 		)
-		console.log("Reusing the existing release " + tag + ".")
+		const state = existing.draft ? "draft" : "published release"
+		console.log("Reusing the existing " + state + " for " + tag + ".")
+		await discardStaleDrafts(tag, existing.id)
 		return
 	}
 
-	requireOk(
+	const created = requireOk(
 		await request("POST", repositoryPath() + "/releases", {
 			tag_name: tag,
 			name: title,
@@ -128,7 +187,7 @@ const releaseReserve = async (tag, title, notesFile) => {
 		}),
 		"Creating release " + tag,
 	)
-	console.log("Created the draft release " + tag + ".")
+	console.log("Created the draft release " + tag + " with id " + String(created.id) + ".")
 }
 
 const releasePublish = async (tag, title, notesFile) => {
@@ -164,6 +223,8 @@ const releasePublish = async (tag, title, notesFile) => {
 	for (const asset of assets) {
 		console.log("  " + String(asset.name))
 	}
+
+	await discardStaleDrafts(tag, release.id)
 }
 
 const issueCreate = async (title, bodyFile) => {
