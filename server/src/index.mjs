@@ -1,7 +1,7 @@
 import { createServer } from "node:http"
 import { createReadStream, createWriteStream } from "node:fs"
 import { mkdir, readdir, rename, stat, unlink } from "node:fs/promises"
-import { extname, join, resolve } from "node:path"
+import { dirname, extname, join, resolve } from "node:path"
 import { pipeline } from "node:stream/promises"
 
 import { Store } from "./store.mjs"
@@ -9,7 +9,10 @@ import { Store } from "./store.mjs"
 const PORT = Number.parseInt(process.env.PORT ?? "8787", 10)
 const HOST = process.env.HOST ?? "127.0.0.1"
 const DATA_FILE = resolve(process.env.DATA_FILE ?? "./data/state.json")
-const UPDATE_DIR = resolve(process.env.UPDATE_DIR ?? "./data/updates")
+
+// Installers live beside the state file unless told otherwise, so the folder is
+// always one the service account already owns.
+const UPDATE_DIR = resolve(process.env.UPDATE_DIR ?? join(dirname(DATA_FILE), "updates"))
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? ""
 const CLIENT_KEY = process.env.CLIENT_KEY ?? ""
 const PRESENCE_TTL_MS = Number.parseInt(process.env.PRESENCE_TTL_SECONDS ?? "300", 10) * 1000
