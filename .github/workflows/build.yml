@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      binaries:
+        description: "Also package installers for every platform"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: build-${{ github.ref }}
@@ -62,14 +68,18 @@ jobs:
           path: out
           retention-days: 7
 
+  # Packaging installers is by far the most expensive thing this repository can
+  # do, and on a private repository macOS runners bill at ten times the Linux
+  # rate. Nothing here runs unless it is asked for by hand, because a release
+  # already produces the installers that matter.
   binaries:
     name: Binaries for ${{ matrix.label }}
     needs: bundle
-    if: ${{ vars.SKIP_BINARY_MATRIX != 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.binaries && vars.SKIP_BINARY_MATRIX != 'true' }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(vars.BINARY_MATRIX || '{"include":[{"label":"windows","flag":"--win","runner":"windows-latest"},{"label":"linux","flag":"--linux","runner":"ubuntu-latest"},{"label":"macos","flag":"--mac","runner":"macos-latest"}]}') }}
+      matrix: ${{ fromJSON(vars.BINARY_MATRIX || '{"include":[{"label":"windows","flag":"--win","runner":"windows-latest"}]}') }}
     steps:
       - name: Use unix line endings for every checkout
         shell: bash
