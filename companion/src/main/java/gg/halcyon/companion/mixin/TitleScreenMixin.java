@@ -2,8 +2,10 @@ package gg.halcyon.companion.mixin;
 
 import gg.halcyon.companion.HalcyonBackend;
 import gg.halcyon.companion.HalcyonConfig;
+import gg.halcyon.companion.HalcyonCosmeticsScreen;
 import gg.halcyon.companion.HalcyonMenuBackground;
 import gg.halcyon.companion.HalcyonMenuButton;
+import gg.halcyon.companion.HalcyonPanelScreen;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gl.RenderPipelines;
 import net.minecraft.client.gui.DrawContext;
@@ -26,7 +28,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  *
  * <p>The panorama is replaced by a picture, the button column is rebuilt with Halcyon widgets, and
  * the header carries the wordmark. The vanilla destinations are reused rather than reimplemented,
- * so singleplayer, multiplayer and options behave exactly as they always did.
+ * so singleplayer, multiplayer and options behave exactly as they always did. A second row along
+ * the bottom holds the things vanilla has no place for, such as the cosmetics wardrobe.
  */
 @Mixin(TitleScreen.class)
 public abstract class TitleScreenMixin extends Screen {
@@ -61,7 +64,7 @@ public abstract class TitleScreenMixin extends Screen {
 		int buttonHeight = 26;
 		int gap = 7;
 		int left = (this.width - buttonWidth) / 2;
-		int top = Math.max(HEADER_HEIGHT + 34, this.height / 2 - 44);
+		int top = Math.max(HEADER_HEIGHT + 30, this.height / 2 - 54);
 
 		addDrawableChild(new HalcyonMenuButton(
 				left,
@@ -101,6 +104,45 @@ public abstract class TitleScreenMixin extends Screen {
 				Text.translatable("menu.quit"),
 				false,
 				client::scheduleStop));
+
+		halcyon$buildBottomRow(client);
+	}
+
+	/** The Halcyon only row, kept along the bottom edge so the vanilla column stays familiar. */
+	private void halcyon$buildBottomRow(MinecraftClient client) {
+		int height = 20;
+		int gap = 8;
+		int width = Math.max(96, Math.min(130, (this.width - gap * 4) / 3));
+		int total = width * 3 + gap * 2;
+		int left = (this.width - total) / 2;
+		int top = this.height - height - 14;
+
+		addDrawableChild(new HalcyonMenuButton(
+				left,
+				top,
+				width,
+				height,
+				Text.literal("Cosmetics"),
+				true,
+				() -> client.setScreen(new HalcyonCosmeticsScreen(this))));
+
+		addDrawableChild(new HalcyonMenuButton(
+				left + width + gap,
+				top,
+				width,
+				height,
+				Text.literal("Halcyon"),
+				false,
+				() -> client.setScreen(new HalcyonPanelScreen(this))));
+
+		addDrawableChild(new HalcyonMenuButton(
+				left + (width + gap) * 2,
+				top,
+				width,
+				height,
+				Text.translatable("menu.online"),
+				false,
+				() -> client.setScreen(new MultiplayerScreen(this))));
 	}
 
 	@Inject(method = "renderBackground", at = @At("HEAD"), cancellable = true)
