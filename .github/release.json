@@ -1,5 +1,5 @@
 {
-  "tag": "v1.2.2",
-  "requestedAt": "2026-08-07T03:06:00Z",
-  "summary": "The in game companion mod now compiles and ships for Minecraft 1.21.11, so launching a Fabric 1.21.11 instance installs the Halcyon badge, the overlay and Fabric API automatically. Key bindings use the new category type and the player roster reads the name through the current entity API."
+  "tag": "v1.2.3",
+  "requestedAt": "2026-08-07T03:48:00Z",
+  "summary": "The companion mod gains a Halcyon loading screen, a branded main menu header and badges in the player list, so you can finally see your own badge on the tab screen. A failed mixin injection now logs a warning instead of crashing the game, and the new badgeAllPlayers, splashEnabled and mainMenuBranding options let you tune all of it from the instance config."
 }
