@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Download &mdash; Halcyon</title>
+		<link rel="stylesheet" href="/styles.css" />
+	</head>
+	<body>
+		<header class="top">
+			<div class="wrap">
+				<a class="brand" href="/"><span class="mark">&#10022;</span> HALCYON</a>
+				<nav class="links">
+					<a href="/download">Download</a>
+					<a href="/cosmetics">Cosmetics</a>
+					<a href="/status">Status</a>
+				</nav>
+				<div class="session" id="session"></div>
+			</div>
+		</header>
+
+		<main>
+			<div class="wrap">
+				<div class="section-head">
+					<h1 style="font-size: 1.9rem">Download</h1>
+					<p>Straight from our own release feed</p>
+				</div>
+				<p>
+					Install once. From then on the launcher checks this same feed on its own and
+					updates itself, so this page is only ever needed for a first install.
+				</p>
+				<div class="card scroll">
+					<table>
+						<thead>
+							<tr><th>File</th><th>Size</th><th>Published</th><th></th></tr>
+						</thead>
+						<tbody id="files"></tbody>
+					</table>
+				</div>
+			</div>
+		</main>
+
+		<footer>
+			<div class="wrap">
+				<span>&copy; <span id="year">2026</span> YugiYX</span>
+				<nav>
+					<a href="/terms">Terms</a>
+					<a href="/privacy">Privacy</a>
+					<a href="/imprint">Imprint</a>
+				</nav>
+			</div>
+		</footer>
+
+		<script src="/app.js"></script>
+		<script>
+			function size(bytes) {
+				const megabytes = Number(bytes ?? 0) / (1024 * 1024)
+				return megabytes < 1
+					? `${Math.round(Number(bytes ?? 0) / 1024)} KB`
+					: `${megabytes.toFixed(1)} MB`
+			}
+
+			async function load() {
+				try {
+					const payload = await Halcyon.api("/v1/updates")
+					// The yml files are the update feed itself, not something a person downloads.
+					const files = (payload.files ?? []).filter(
+						(file) => !file.name.endsWith(".yml") && !file.name.endsWith(".blockmap"),
+					)
+
+					document.getElementById("files").innerHTML =
+						files.length === 0
+							? '<tr><td colspan="4">No builds published yet.</td></tr>'
+							: files
+									.map(
+										(file) =>
+											`<tr><td>${Halcyon.escape(file.name)}</td><td>${size(file.bytes)}</td><td>${Halcyon.escape(Halcyon.when(file.modifiedAt))}</td><td><a class="button small primary" href="/v1/updates/${encodeURIComponent(file.name)}">Download</a></td></tr>`,
+									)
+									.join("")
+				} catch (error) {
+					document.getElementById("files").innerHTML =
+						`<tr><td colspan="4">${Halcyon.escape(error.message)}</td></tr>`
+				}
+			}
+
+			load()
+		</script>
+	</body>
+</html>

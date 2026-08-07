@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Status &mdash; Halcyon</title>
+		<link rel="stylesheet" href="/styles.css" />
+	</head>
+	<body>
+		<header class="top">
+			<div class="wrap">
+				<a class="brand" href="/"><span class="mark">&#10022;</span> HALCYON</a>
+				<nav class="links">
+					<a href="/download">Download</a>
+					<a href="/cosmetics">Cosmetics</a>
+					<a href="/status">Status</a>
+				</nav>
+				<div class="session" id="session"></div>
+			</div>
+		</header>
+
+		<main>
+			<div class="wrap">
+				<div class="section-head">
+					<h1 style="font-size: 1.9rem">Status</h1>
+					<p id="state">checking&hellip;</p>
+				</div>
+				<div class="grid">
+					<div class="card stat">
+						<span class="value" id="online">&mdash;</span>
+						<span class="label">Playing now</span>
+					</div>
+					<div class="card stat">
+						<span class="value" id="registered">&mdash;</span>
+						<span class="label">Registered</span>
+					</div>
+					<div class="card stat">
+						<span class="value" id="worn">&mdash;</span>
+						<span class="label">Capes worn</span>
+					</div>
+					<div class="card stat">
+						<span class="value" id="uptime">&mdash;</span>
+						<span class="label">Uptime</span>
+					</div>
+				</div>
+			</div>
+		</main>
+
+		<footer>
+			<div class="wrap">
+				<span>&copy; <span id="year">2026</span> YugiYX</span>
+				<nav>
+					<a href="/terms">Terms</a>
+					<a href="/privacy">Privacy</a>
+					<a href="/imprint">Imprint</a>
+				</nav>
+			</div>
+		</footer>
+
+		<script src="/app.js"></script>
+		<script>
+			function uptime(seconds) {
+				const total = Number(seconds ?? 0)
+				const days = Math.floor(total / 86400)
+				const hours = Math.floor((total % 86400) / 3600)
+				const minutes = Math.floor((total % 3600) / 60)
+				if (days > 0) {
+					return `${days}d ${hours}h`
+				}
+				return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`
+			}
+
+			async function load() {
+				try {
+					const stats = await Halcyon.api("/v1/stats")
+					document.getElementById("state").textContent = "all systems normal"
+					document.getElementById("online").textContent = Halcyon.number(stats.online)
+					document.getElementById("registered").textContent = Halcyon.number(
+						stats.registered,
+					)
+					document.getElementById("worn").textContent = Halcyon.number(stats.capesWorn)
+					document.getElementById("uptime").textContent = uptime(stats.uptimeSeconds)
+				} catch (error) {
+					document.getElementById("state").textContent = error.message
+				}
+			}
+
+			load()
+			setInterval(load, 30000)
+		</script>
+	</body>
+</html>

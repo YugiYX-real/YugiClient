@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Sign in &mdash; Halcyon</title>
+		<link rel="stylesheet" href="/styles.css" />
+	</head>
+	<body>
+		<header class="top">
+			<div class="wrap">
+				<a class="brand" href="/"><span class="mark">&#10022;</span> HALCYON</a>
+				<nav class="links">
+					<a href="/download">Download</a>
+					<a href="/cosmetics">Cosmetics</a>
+					<a href="/status">Status</a>
+				</nav>
+				<div class="session" id="session"></div>
+			</div>
+		</header>
+
+		<main>
+			<div class="wrap">
+				<div class="card form-card">
+					<h1>Welcome back</h1>
+					<p class="note">Use your username or your email address.</p>
+
+					<div class="message" id="message"></div>
+
+					<form id="form">
+						<div class="field">
+							<label for="login">Username or email</label>
+							<input id="login" name="login" autocomplete="username" required />
+						</div>
+						<div class="field">
+							<label for="password">Password</label>
+							<input
+								id="password"
+								name="password"
+								type="password"
+								autocomplete="current-password"
+								required
+							/>
+						</div>
+						<button class="button primary" type="submit" id="submit" style="width: 100%">
+							Sign in
+						</button>
+					</form>
+
+					<p class="note" style="margin-top: 1rem">
+						No account yet? <a href="/register">Create one</a>.
+					</p>
+				</div>
+			</div>
+		</main>
+
+		<footer>
+			<div class="wrap">
+				<span>&copy; <span id="year">2026</span> YugiYX</span>
+				<nav>
+					<a href="/terms">Terms</a>
+					<a href="/privacy">Privacy</a>
+					<a href="/imprint">Imprint</a>
+				</nav>
+			</div>
+		</footer>
+
+		<script src="/app.js"></script>
+		<script>
+			function destination() {
+				const next = new URLSearchParams(window.location.search).get("next")
+				// Only same site paths, so the parameter cannot be used to bounce people elsewhere.
+				return next !== null && next.startsWith("/") && !next.startsWith("//")
+					? next
+					: "/account"
+			}
+
+			document.getElementById("form").addEventListener("submit", async (event) => {
+				event.preventDefault()
+				Halcyon.clear("message")
+
+				const button = document.getElementById("submit")
+				button.disabled = true
+				try {
+					await Halcyon.api("/v1/auth/login", {
+						method: "POST",
+						body: {
+							login: document.getElementById("login").value,
+							password: document.getElementById("password").value,
+						},
+					})
+					window.location.href = destination()
+				} catch (error) {
+					Halcyon.say("message", error.message)
+					button.disabled = false
+				}
+			})
+		</script>
+	</body>
+</html>

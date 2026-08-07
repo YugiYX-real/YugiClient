@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Cosmetics &mdash; Halcyon</title>
+		<link rel="stylesheet" href="/styles.css" />
+	</head>
+	<body>
+		<header class="top">
+			<div class="wrap">
+				<a class="brand" href="/"><span class="mark">&#10022;</span> HALCYON</a>
+				<nav class="links">
+					<a href="/download">Download</a>
+					<a href="/cosmetics">Cosmetics</a>
+					<a href="/status">Status</a>
+				</nav>
+				<div class="session" id="session"></div>
+			</div>
+		</header>
+
+		<main>
+			<div class="wrap">
+				<div class="section-head">
+					<h1 style="font-size: 1.9rem">Cosmetics</h1>
+					<p>Every cape in the client</p>
+				</div>
+				<p>
+					Capes are granted by YugiYX and cannot be bought. Wear them from the wardrobe on
+					the Minecraft main menu, or by pressing right shift in game.
+				</p>
+				<div id="list"></div>
+			</div>
+		</main>
+
+		<footer>
+			<div class="wrap">
+				<span>&copy; <span id="year">2026</span> YugiYX</span>
+				<nav>
+					<a href="/terms">Terms</a>
+					<a href="/privacy">Privacy</a>
+					<a href="/imprint">Imprint</a>
+				</nav>
+			</div>
+		</footer>
+
+		<script src="/app.js"></script>
+		<script>
+			async function load() {
+				try {
+					const payload = await Halcyon.api("/v1/cosmetics")
+					const cosmetics = payload.cosmetics ?? []
+					document.getElementById("list").innerHTML =
+						cosmetics.length === 0
+							? '<div class="empty">Nothing released yet. Watch this page.</div>'
+							: '<div class="capes">' +
+								cosmetics.map((cosmetic) => Halcyon.capeCard(cosmetic)).join("") +
+								"</div>"
+				} catch (error) {
+					document.getElementById("list").innerHTML =
+						`<div class="empty">${Halcyon.escape(error.message)}</div>`
+				}
+			}
+
+			load()
+		</script>
+	</body>
+</html>

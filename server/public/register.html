@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Create an account &mdash; Halcyon</title>
+		<link rel="stylesheet" href="/styles.css" />
+	</head>
+	<body>
+		<header class="top">
+			<div class="wrap">
+				<a class="brand" href="/"><span class="mark">&#10022;</span> HALCYON</a>
+				<nav class="links">
+					<a href="/download">Download</a>
+					<a href="/cosmetics">Cosmetics</a>
+					<a href="/status">Status</a>
+				</nav>
+				<div class="session" id="session"></div>
+			</div>
+		</header>
+
+		<main>
+			<div class="wrap">
+				<div class="card form-card">
+					<h1>Create your account</h1>
+					<p class="note">
+						One account for cosmetics, announcements and the launcher. The very first
+						account on a fresh server becomes the admin.
+					</p>
+
+					<div class="message" id="message"></div>
+
+					<form id="form">
+						<div class="field">
+							<label for="username">Username</label>
+							<input id="username" name="username" autocomplete="username" required />
+							<div class="hint">3 to 20 letters, digits or underscores.</div>
+						</div>
+						<div class="field">
+							<label for="email">Email</label>
+							<input id="email" name="email" type="email" autocomplete="email" required />
+						</div>
+						<div class="field">
+							<label for="password">Password</label>
+							<input
+								id="password"
+								name="password"
+								type="password"
+								autocomplete="new-password"
+								required
+							/>
+							<div class="hint">At least 8 characters.</div>
+						</div>
+						<div class="field">
+							<label for="confirm">Repeat password</label>
+							<input
+								id="confirm"
+								name="confirm"
+								type="password"
+								autocomplete="new-password"
+								required
+							/>
+						</div>
+						<div class="field">
+							<label class="checkbox">
+								<input type="checkbox" id="agree" required />
+								<span
+									>I have read the <a href="/terms">terms</a> and the
+									<a href="/privacy">privacy notice</a>.</span
+								>
+							</label>
+						</div>
+						<button class="button primary" type="submit" id="submit" style="width: 100%">
+							Create account
+						</button>
+					</form>
+
+					<p class="note" style="margin-top: 1rem">
+						Already have one? <a href="/login">Sign in</a>.
+					</p>
+				</div>
+			</div>
+		</main>
+
+		<footer>
+			<div class="wrap">
+				<span>&copy; <span id="year">2026</span> YugiYX</span>
+				<nav>
+					<a href="/terms">Terms</a>
+					<a href="/privacy">Privacy</a>
+					<a href="/imprint">Imprint</a>
+				</nav>
+			</div>
+		</footer>
+
+		<script src="/app.js"></script>
+		<script>
+			document.getElementById("form").addEventListener("submit", async (event) => {
+				event.preventDefault()
+				Halcyon.clear("message")
+
+				const password = document.getElementById("password").value
+				if (password !== document.getElementById("confirm").value) {
+					Halcyon.say("message", "the two passwords do not match")
+					return
+				}
+
+				const button = document.getElementById("submit")
+				button.disabled = true
+				try {
+					await Halcyon.api("/v1/auth/register", {
+						method: "POST",
+						body: {
+							username: document.getElementById("username").value,
+							email: document.getElementById("email").value,
+							password,
+						},
+					})
+					window.location.href = "/account"
+				} catch (error) {
+					Halcyon.say("message", error.message)
+					button.disabled = false
+				}
+			})
+		</script>
+	</body>
+</html>

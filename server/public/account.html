@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Your account &mdash; Halcyon</title>
+		<link rel="stylesheet" href="/styles.css" />
+	</head>
+	<body>
+		<header class="top">
+			<div class="wrap">
+				<a class="brand" href="/"><span class="mark">&#10022;</span> HALCYON</a>
+				<nav class="links">
+					<a href="/download">Download</a>
+					<a href="/cosmetics">Cosmetics</a>
+					<a href="/status">Status</a>
+				</nav>
+				<div class="session" id="session"></div>
+			</div>
+		</header>
+
+		<main>
+			<div class="wrap">
+				<div class="section-head">
+					<h1 style="font-size: 1.9rem">Your account</h1>
+				</div>
+
+				<div class="message" id="message"></div>
+
+				<div class="grid">
+					<div class="card">
+						<h3>Profile</h3>
+						<table>
+							<tbody>
+								<tr>
+									<th>Username</th>
+									<td id="who">&mdash;</td>
+								</tr>
+								<tr>
+									<th>Email</th>
+									<td id="mail">&mdash;</td>
+								</tr>
+								<tr>
+									<th>Role</th>
+									<td id="role">&mdash;</td>
+								</tr>
+								<tr>
+									<th>Member since</th>
+									<td id="since">&mdash;</td>
+								</tr>
+							</tbody>
+						</table>
+						<div class="row" style="margin-top: 1rem">
+							<button class="button small" id="signout">Sign out</button>
+						</div>
+					</div>
+
+					<div class="card">
+						<h3>Minecraft name</h3>
+						<p class="note">
+							Link the name you play with so your cosmetics follow your account.
+						</p>
+						<form id="link-form">
+							<div class="field">
+								<label for="minecraft">In game name</label>
+								<input id="minecraft" placeholder="YugiYX" />
+							</div>
+							<button class="button" type="submit">Save</button>
+						</form>
+					</div>
+
+					<div class="card">
+						<h3>Password</h3>
+						<p class="note">Changing it signs you out everywhere.</p>
+						<form id="password-form">
+							<div class="field">
+								<label for="current">Current password</label>
+								<input id="current" type="password" autocomplete="current-password" />
+							</div>
+							<div class="field">
+								<label for="next">New password</label>
+								<input id="next" type="password" autocomplete="new-password" />
+							</div>
+							<button class="button" type="submit">Change password</button>
+						</form>
+					</div>
+				</div>
+
+				<section class="section">
+					<div class="section-head">
+						<h2>Your cosmetics</h2>
+						<p id="worn"></p>
+					</div>
+					<div id="capes"></div>
+				</section>
+			</div>
+		</main>
+
+		<footer>
+			<div class="wrap">
+				<span>&copy; <span id="year">2026</span> YugiYX</span>
+				<nav>
+					<a href="/terms">Terms</a>
+					<a href="/privacy">Privacy</a>
+					<a href="/imprint">Imprint</a>
+				</nav>
+			</div>
+		</footer>
+
+		<script src="/app.js"></script>
+		<script>
+			async function load() {
+				const user = await Halcyon.guard()
+				if (user === null) {
+					return
+				}
+
+				const payload = await Halcyon.api("/v1/account/overview")
+				document.getElementById("who").textContent = payload.user.username
+				document.getElementById("mail").textContent = payload.user.email
+				document.getElementById("role").innerHTML =
+					payload.user.role === "admin"
+						? '<span class="tag admin">admin</span>'
+						: '<span class="tag">member</span>'
+				document.getElementById("since").textContent = Halcyon.when(payload.user.createdAt)
+				document.getElementById("minecraft").value = payload.user.minecraft ?? ""
+
+				const capes = payload.owned ?? []
+				const equipped = payload.profile?.equipped?.cape ?? null
+				document.getElementById("worn").textContent =
+					equipped === null ? "nothing equipped" : `wearing ${equipped}`
+
+				if (payload.user.minecraft === "") {
+					document.getElementById("capes").innerHTML =
+						'<div class="empty">Link your Minecraft name above to see what you own.</div>'
+					return
+				}
+
+				if (capes.length === 0) {
+					document.getElementById("capes").innerHTML =
+						'<div class="empty">No cosmetics yet. Only YugiYX hands them out.</div>'
+					return
+				}
+
+				document.getElementById("capes").innerHTML =
+					'<div class="capes">' +
+					capes
+						.map((cape) =>
+							Halcyon.capeCard(
+								cape,
+								cape.id === equipped ? '<div class="tag admin">worn</div>' : "",
+							),
+						)
+						.join("") +
+					"</div>"
+			}
+
+			document.getElementById("link-form").addEventListener("submit", async (event) => {
+				event.preventDefault()
+				try {
+					await Halcyon.api("/v1/account/minecraft", {
+						method: "POST",
+						body: { minecraft: document.getElementById("minecraft").value },
+					})
+					Halcyon.toast("saved")
+					load()
+				} catch (error) {
+					Halcyon.toast(error.message, true)
+				}
+			})
+
+			document.getElementById("password-form").addEventListener("submit", async (event) => {
+				event.preventDefault()
+				try {
+					await Halcyon.api("/v1/account/password", {
+						method: "POST",
+						body: {
+							current: document.getElementById("current").value,
+							next: document.getElementById("next").value,
+						},
+					})
+					window.location.href = "/login"
+				} catch (error) {
+					Halcyon.toast(error.message, true)
+				}
+			})
+
+			document.getElementById("signout").addEventListener("click", () => Halcyon.logout())
+
+			load().catch((error) => Halcyon.say("message", error.message))
+		</script>
+	</body>
+</html>
