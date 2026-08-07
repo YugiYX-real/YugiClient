@@ -5,7 +5,7 @@ const DEFAULT_BRANDING = {
 	accentColor: "#8B7CF6",
 	badgeText: "\u2726",
 	menuMessage: "",
-	backgroundUrl: ""
+	backgroundUrl: "",
 }
 
 const PERSIST_DELAY_MS = 2000
@@ -47,7 +47,7 @@ export class Store {
 					branding: { ...DEFAULT_BRANDING, ...(parsed.branding ?? {}) },
 					announcements: Array.isArray(parsed.announcements) ? parsed.announcements : [],
 					cosmetics: parsed.cosmetics ?? {},
-					profiles: parsed.profiles ?? {}
+					profiles: parsed.profiles ?? {},
 				}
 			}
 		} catch (error) {
@@ -59,7 +59,7 @@ export class Store {
 			branding: { ...DEFAULT_BRANDING },
 			announcements: [],
 			cosmetics: {},
-			profiles: {}
+			profiles: {},
 		}
 	}
 
@@ -103,7 +103,7 @@ export class Store {
 			client: details.client ?? existing.client ?? "halcyon",
 			version: details.version ?? existing.version ?? "",
 			firstSeen: existing.firstSeen ?? new Date().toISOString(),
-			lastSeen: new Date().toISOString()
+			lastSeen: new Date().toISOString(),
 		}
 
 		this.schedulePersist()
@@ -159,7 +159,7 @@ export class Store {
 	/** Every cosmetic the owner published, sorted by name. */
 	cosmetics() {
 		return Object.values(this.state.cosmetics).sort((left, right) =>
-			String(left.name).localeCompare(String(right.name))
+			String(left.name).localeCompare(String(right.name)),
 		)
 	}
 
@@ -183,13 +183,15 @@ export class Store {
 			type: "cape",
 			name: typeof entry.name === "string" ? entry.name : (existing.name ?? id),
 			description:
-				typeof entry.description === "string" ? entry.description : (existing.description ?? ""),
+				typeof entry.description === "string"
+					? entry.description
+					: (existing.description ?? ""),
 			rarity: typeof entry.rarity === "string" ? entry.rarity : (existing.rarity ?? "common"),
 			texture:
 				typeof entry.texture === "string" && entry.texture.trim() !== ""
 					? entry.texture.trim()
 					: (existing.texture ?? `/v1/cosmetics/textures/${id}.png`),
-			createdAt: existing.createdAt ?? new Date().toISOString()
+			createdAt: existing.createdAt ?? new Date().toISOString(),
 		}
 
 		this.state.cosmetics[id] = record
@@ -227,7 +229,7 @@ export class Store {
 		return {
 			name: stored.name ?? String(name).trim(),
 			owned,
-			equipped: { cape: owned.includes(cape) ? cape : null }
+			equipped: { cape: owned.includes(cape) ? cape : null },
 		}
 	}
 
@@ -238,7 +240,11 @@ export class Store {
 			return null
 		}
 
-		const stored = this.state.profiles[key] ?? { name: String(name).trim(), owned: [], equipped: {} }
+		const stored = this.state.profiles[key] ?? {
+			name: String(name).trim(),
+			owned: [],
+			equipped: {},
+		}
 		stored.name = String(name).trim()
 		stored.owned = Array.from(new Set([...(stored.owned ?? []), cosmetic]))
 		stored.equipped = stored.equipped ?? {}
@@ -275,7 +281,11 @@ export class Store {
 			return null
 		}
 
-		const stored = this.state.profiles[key] ?? { name: String(name).trim(), owned: [], equipped: {} }
+		const stored = this.state.profiles[key] ?? {
+			name: String(name).trim(),
+			owned: [],
+			equipped: {},
+		}
 		stored.name = String(name).trim()
 		stored.owned = stored.owned ?? []
 		stored.equipped = stored.equipped ?? {}

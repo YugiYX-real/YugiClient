@@ -169,7 +169,9 @@ async function replaceAsset(release, asset) {
 	})
 	if (!response.ok) {
 		const detail = (await response.text()).slice(0, 400)
-		throw new Error("Uploading " + asset.name + " failed with " + response.status + ": " + detail)
+		throw new Error(
+			"Uploading " + asset.name + " failed with " + response.status + ": " + detail,
+		)
 	}
 
 	const megabytes = (asset.size / (1024 * 1024)).toFixed(1)
@@ -212,7 +214,9 @@ function parseArguments(argv) {
 async function main() {
 	const { tag, directory, notes } = parseArguments(process.argv.slice(2))
 	if (tag === null || !/^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/.test(tag)) {
-		throw new Error("Pass the tag to publish, for example: node " + basename(process.argv[1]) + " v1.2.1")
+		throw new Error(
+			"Pass the tag to publish, for example: node " + basename(process.argv[1]) + " v1.2.1",
+		)
 	}
 
 	const outputDirectory = resolve(process.cwd(), directory)

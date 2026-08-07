@@ -60,7 +60,8 @@ const request = async (method, path, body) => {
 
 const requireOk = (result, description) => {
 	if (result.status >= 400) {
-		const message = typeof result.body.message === "string" ? result.body.message : "unknown error"
+		const message =
+			typeof result.body.message === "string" ? result.body.message : "unknown error"
 		throw new Error(description + " failed with " + String(result.status) + ": " + message)
 	}
 	return result.body
@@ -93,7 +94,8 @@ const listReleases = async () => {
 // A tag can end up with more than one release when an earlier run failed part
 // way through. Prefer an already published release, then the draft that carries
 // the most assets, so nothing that was uploaded is ever thrown away.
-const rankRelease = (release) => (release.draft ? assetCount(release) : 1000000 + assetCount(release))
+const rankRelease = (release) =>
+	release.draft ? assetCount(release) : 1000000 + assetCount(release)
 
 const matchingReleases = async (tag) => {
 	const all = await listReleases()
@@ -108,7 +110,10 @@ const findRelease = async (tag) => {
 	}
 
 	// Fall back to the direct lookup in case the list was truncated.
-	const result = await request("GET", repositoryPath() + "/releases/tags/" + encodeURIComponent(tag))
+	const result = await request(
+		"GET",
+		repositoryPath() + "/releases/tags/" + encodeURIComponent(tag),
+	)
 	if (result.status === 404) {
 		return null
 	}
@@ -203,7 +208,9 @@ const releasePublish = async (tag, title, notesFile) => {
 	const assets = Array.isArray(release.assets) ? release.assets : []
 	if (assets.length === 0) {
 		throw new Error(
-			"No assets were uploaded for " + tag + ", so it stays a draft rather than shipping empty.",
+			"No assets were uploaded for " +
+				tag +
+				", so it stays a draft rather than shipping empty.",
 		)
 	}
 

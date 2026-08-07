@@ -112,7 +112,10 @@ export class CompanionService {
 		}
 
 		await this.removeCompanionJars(modsDirectory, COMPANION_FILE_NAME)
-		const refreshed = await this.copyWhenChanged(source, join(modsDirectory, COMPANION_FILE_NAME))
+		const refreshed = await this.copyWhenChanged(
+			source,
+			join(modsDirectory, COMPANION_FILE_NAME),
+		)
 
 		let api = ""
 		try {

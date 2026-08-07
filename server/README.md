@@ -6,16 +6,16 @@ a lockfile. State is a single json file.
 
 ## What it does
 
-| Endpoint | Method | Auth | Purpose |
-| --- | --- | --- | --- |
-| `/v1/health` | GET | none | Liveness, uptime and the online count |
-| `/v1/roster` | GET | none | Names of players seen within the presence window |
-| `/v1/players` | GET | none | The same list with client and version detail |
-| `/v1/heartbeat` | POST | client key | Announces that a player is online |
-| `/v1/branding` | GET | none | Accent colour, badge glyph and menu message |
-| `/v1/branding` | PUT | admin token | Changes the branding without a new client build |
-| `/v1/announcements` | GET | none | Messages to show in the launcher |
-| `/v1/announcements` | PUT | admin token | Replaces the announcement list |
+| Endpoint            | Method | Auth        | Purpose                                          |
+| ------------------- | ------ | ----------- | ------------------------------------------------ |
+| `/v1/health`        | GET    | none        | Liveness, uptime and the online count            |
+| `/v1/roster`        | GET    | none        | Names of players seen within the presence window |
+| `/v1/players`       | GET    | none        | The same list with client and version detail     |
+| `/v1/heartbeat`     | POST   | client key  | Announces that a player is online                |
+| `/v1/branding`      | GET    | none        | Accent colour, badge glyph and menu message      |
+| `/v1/branding`      | PUT    | admin token | Changes the branding without a new client build  |
+| `/v1/announcements` | GET    | none        | Messages to show in the launcher                 |
+| `/v1/announcements` | PUT    | admin token | Replaces the announcement list                   |
 
 The companion mod calls `/v1/heartbeat`, `/v1/roster` and `/v1/branding` once a minute. Every call
 is asynchronous and every failure is ignored, so the backend going down never affects the game.
@@ -91,9 +91,9 @@ Edit `config/halcyon-companion.json` inside the instance:
 
 ```json
 {
-	"backendUrl": "http://85.215.223.254:8787",
-	"backendKey": "the client key printed by expose.sh",
-	"badgeAllPlayers": false
+  "backendUrl": "http://85.215.223.254:8787",
+  "backendKey": "the client key printed by expose.sh",
+  "badgeAllPlayers": false
 }
 ```
 

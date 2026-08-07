@@ -1,18 +1,18 @@
 {
-	"name": "halcyon-backend",
-	"version": "1.0.0",
-	"private": true,
-	"description": "Roster, presence and branding service for the Halcyon launcher",
-	"author": {
-		"name": "YugiYX"
-	},
-	"license": "MIT",
-	"type": "module",
-	"main": "src/index.mjs",
-	"engines": {
-		"node": ">=20.11.0"
-	},
-	"scripts": {
-		"start": "node src/index.mjs"
-	}
+  "name": "halcyon-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Roster, presence and branding service for the Halcyon launcher",
+  "author": {
+    "name": "YugiYX"
+  },
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.mjs",
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "scripts": {
+    "start": "node src/index.mjs"
+  }
 }

@@ -93,7 +93,9 @@ async function upload(base, token, file) {
 
 	if (!response.ok) {
 		const detail = (await response.text()).slice(0, 300)
-		throw new Error("Uploading " + file.name + " failed with " + response.status + ": " + detail)
+		throw new Error(
+			"Uploading " + file.name + " failed with " + response.status + ": " + detail,
+		)
 	}
 
 	const megabytes = (file.size / (1024 * 1024)).toFixed(1)

@@ -35,7 +35,7 @@ const CONTENT_TYPES = {
 	".json": "application/json; charset=utf-8",
 	".png": "image/png",
 	".zip": "application/zip",
-	".gz": "application/gzip"
+	".gz": "application/gzip",
 }
 
 const store = new Store(DATA_FILE, PRESENCE_TTL_MS)
@@ -70,7 +70,7 @@ function send(response, status, payload) {
 		"access-control-allow-origin": "*",
 		"access-control-allow-headers": "content-type, authorization, x-halcyon-key",
 		"access-control-allow-methods": "GET, HEAD, POST, PUT, DELETE, OPTIONS",
-		"cache-control": "no-store"
+		"cache-control": "no-store",
 	})
 	response.end(body)
 }
@@ -178,7 +178,7 @@ async function listFiles(directory) {
 			files.push({
 				name: entry,
 				bytes: info.size,
-				modifiedAt: new Date(info.mtimeMs).toISOString()
+				modifiedAt: new Date(info.mtimeMs).toISOString(),
 			})
 		}
 	}
@@ -204,7 +204,7 @@ async function serveFile(request, response, directory, name) {
 		"content-type": CONTENT_TYPES[extension] ?? "application/octet-stream",
 		"accept-ranges": "bytes",
 		"access-control-allow-origin": "*",
-		"cache-control": extension === ".yml" ? "no-store" : "public, max-age=86400"
+		"cache-control": extension === ".yml" ? "no-store" : "public, max-age=86400",
 	}
 
 	if (request.method === "HEAD") {
@@ -223,7 +223,7 @@ async function serveFile(request, response, directory, name) {
 	response.writeHead(206, {
 		...head,
 		"content-length": range.end - range.start + 1,
-		"content-range": `bytes ${range.start}-${range.end}/${info.size}`
+		"content-range": `bytes ${range.start}-${range.end}/${info.size}`,
 	})
 	await pipeline(createReadStream(file, { start: range.start, end: range.end }), response)
 }
@@ -460,7 +460,7 @@ async function handle(request, response, path) {
 		send(response, 200, {
 			status: "ok",
 			uptimeSeconds: Math.round((Date.now() - startedAt) / 1000),
-			online: store.onlinePlayers().length
+			online: store.onlinePlayers().length,
 		})
 		return
 	}
@@ -470,7 +470,7 @@ async function handle(request, response, path) {
 		send(response, 200, {
 			players: players.map((player) => player.name),
 			count: players.length,
-			updatedAt: new Date().toISOString()
+			updatedAt: new Date().toISOString(),
 		})
 		return
 	}
@@ -500,7 +500,7 @@ async function handle(request, response, path) {
 
 		const player = store.heartbeat(name, {
 			client: typeof payload.client === "string" ? payload.client : undefined,
-			version: typeof payload.version === "string" ? payload.version : undefined
+			version: typeof payload.version === "string" ? payload.version : undefined,
 		})
 		send(response, 200, { player, online: store.onlinePlayers().length })
 		return
@@ -555,7 +555,7 @@ async function handle(request, response, path) {
 	if (path === UPDATE_PREFIX && (request.method === "GET" || request.method === "HEAD")) {
 		send(response, 200, {
 			feed: `${UPDATE_PREFIX}/latest.yml`,
-			files: await listFiles(UPDATE_DIR)
+			files: await listFiles(UPDATE_DIR),
 		})
 		return
 	}
@@ -622,6 +622,8 @@ server.listen(PORT, HOST, () => {
 	console.log(`[halcyon] update folder ${UPDATE_DIR}`)
 	console.log(`[halcyon] cosmetic folder ${COSMETIC_DIR}`)
 	if (ADMIN_TOKEN === "") {
-		console.warn("[halcyon] no admin token is set, branding, cosmetics and uploads are disabled")
+		console.warn(
+			"[halcyon] no admin token is set, branding, cosmetics and uploads are disabled",
+		)
 	}
 })

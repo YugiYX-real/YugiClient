@@ -333,7 +333,12 @@ export class LaunchService {
 	): Promise<void> {
 		this.progress(instanceId, "installing", "Checking the Halcyon companion mod", 0.62)
 		try {
-			const outcome = await this.companion.ensure({ id: instanceId, name, loader, gameVersion })
+			const outcome = await this.companion.ensure({
+				id: instanceId,
+				name,
+				loader,
+				gameVersion,
+			})
 			this.logger.info(outcome.detail)
 		} catch (error) {
 			this.logger.warn(`The companion mod could not be prepared for ${name}`, error)
