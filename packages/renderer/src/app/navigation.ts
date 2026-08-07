@@ -4,6 +4,7 @@ export type RouteId =
 	| "discover"
 	| "accounts"
 	| "skins"
+	| "cosmetics"
 	| "java"
 	| "downloads"
 	| "logs"
@@ -18,6 +19,7 @@ export const ROUTE_TITLES: Record<RouteId, { title: string; subtitle: string }> 
 	discover: { title: "Discover", subtitle: "Mods, shaders and packs from Modrinth" },
 	accounts: { title: "Accounts", subtitle: "Microsoft profiles and automatic sessions" },
 	skins: { title: "Skins", subtitle: "Your wardrobe with live preview" },
+	cosmetics: { title: "Cosmetics", subtitle: "Halcyon capes for your account" },
 	java: { title: "Java", subtitle: "Runtimes detected and managed for you" },
 	downloads: { title: "Downloads", subtitle: "Queue, speed and failures at a glance" },
 	logs: { title: "Logs", subtitle: "Launcher and game output with crash analysis" },

@@ -18,6 +18,7 @@ const GROUPS: readonly { readonly label: string; readonly entries: readonly NavE
 		entries: [
 			{ route: "accounts", label: "Accounts", icon: "accounts" },
 			{ route: "skins", label: "Skins", icon: "skins" },
+			{ route: "cosmetics", label: "Cosmetics", icon: "sparkle" },
 		],
 	},
 	{
