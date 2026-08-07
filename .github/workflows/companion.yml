@@ -36,10 +36,12 @@ jobs:
         with:
           node-version: 22
 
+      # Loom 1.12, which is the first line that understands Minecraft 1.21.11,
+      # refuses to configure on anything older than Gradle 8.14.
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: "8.10"
+          gradle-version: "8.14"
 
       - name: Build the mod
         id: companion
