@@ -32,9 +32,10 @@ fi
 
 echo "Installing the application to $APP_DIR"
 mkdir -p "$APP_DIR"
-# The old src is removed first so a deleted file does not linger in the installed copy.
-rm -rf "$APP_DIR/src"
-cp -r "$SOURCE_DIR/src" "$SOURCE_DIR/package.json" "$APP_DIR/"
+# The old copies are removed first so a deleted file does not linger in the installed copy.
+rm -rf "$APP_DIR/src" "$APP_DIR/public"
+# public holds the website, so it has to travel with the source or every page answers 404.
+cp -r "$SOURCE_DIR/src" "$SOURCE_DIR/public" "$SOURCE_DIR/package.json" "$APP_DIR/"
 
 mkdir -p "$DATA_DIR"
 chown -R halcyon:halcyon "$DATA_DIR"
@@ -60,4 +61,6 @@ systemctl restart halcyon-backend
 echo
 systemctl --no-pager status halcyon-backend | head -n 12
 echo
-echo "Done. Check it with: curl http://127.0.0.1:8787/v1/health"
+echo "Done. Check the api with: curl http://127.0.0.1:8787/v1/health"
+echo "The website is on the same port. Open it in a browser and register the first"
+echo "account, because the first account ever created becomes the admin."
