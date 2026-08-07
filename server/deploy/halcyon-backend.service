@@ -1,0 +1,29 @@
+[Unit]
+Description=Halcyon backend
+Documentation=https://github.com/YugiYX-real/YugiClient
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=halcyon
+Group=halcyon
+WorkingDirectory=/opt/halcyon-backend
+Environment=NODE_ENV=production
+EnvironmentFile=/etc/halcyon-backend.env
+ExecStart=/usr/bin/node /opt/halcyon-backend/src/index.mjs
+Restart=always
+RestartSec=3
+
+# The service only ever needs to write its own state directory.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+ReadWritePaths=/var/lib/halcyon-backend
+
+[Install]
+WantedBy=multi-user.target
