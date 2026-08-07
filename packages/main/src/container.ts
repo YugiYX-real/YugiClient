@@ -15,6 +15,7 @@ import { AuthService, DEFAULT_ACCOUNT_STATE } from "./services/auth-service.ts"
 import type { AccountState } from "./services/auth-service.ts"
 import { BackupService, DEFAULT_BACKUP_INDEX } from "./services/backup-service.ts"
 import type { BackupIndex } from "./services/backup-service.ts"
+import { CompanionService } from "./services/companion-service.ts"
 import { ContentService } from "./services/content-service.ts"
 import { DashboardService } from "./services/dashboard-service.ts"
 import { DownloadService } from "./services/download-service.ts"
@@ -65,6 +66,7 @@ export type Container = {
 	readonly logs: LogService
 	readonly statistics: StatisticsService
 	readonly presence: PresenceService
+	readonly companion: CompanionService
 	readonly launch: LaunchService
 	readonly versionChanges: VersionChangeService
 	readonly updates: UpdateService
@@ -191,6 +193,12 @@ export async function createContainer(options: {
 
 	const presence = new PresenceService({ logger: log.logger("presence") })
 
+	const companion = new CompanionService({
+		instances,
+		http,
+		logger: log.logger("companion"),
+	})
+
 	const launch = new LaunchService({
 		instances,
 		versions,
@@ -201,6 +209,7 @@ export async function createContainer(options: {
 		logs,
 		statistics,
 		presence,
+		companion,
 		events,
 		logger: log.logger("launch"),
 		paths,
@@ -293,6 +302,7 @@ export async function createContainer(options: {
 		logs,
 		statistics,
 		presence,
+		companion,
 		launch,
 		versionChanges,
 		updates,
