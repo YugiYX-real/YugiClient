@@ -2,9 +2,14 @@ import { createServer } from "node:http"
 import { createReadStream, createWriteStream } from "node:fs"
 import { mkdir, readdir, rename, stat, unlink } from "node:fs/promises"
 import { dirname, extname, join, resolve } from "node:path"
+import { fileURLToPath } from "node:url"
 import { pipeline } from "node:stream/promises"
 
 import { Store, normaliseCosmeticId } from "./store.mjs"
+import { Accounts } from "./accounts.mjs"
+import { serveSite } from "./site.mjs"
+
+const HERE = dirname(fileURLToPath(import.meta.url))
 
 const PORT = Number.parseInt(process.env.PORT ?? "8787", 10)
 const HOST = process.env.HOST ?? "127.0.0.1"
@@ -14,19 +19,30 @@ const DATA_FILE = resolve(process.env.DATA_FILE ?? "./data/state.json")
 // folders are always ones the service account already owns.
 const UPDATE_DIR = resolve(process.env.UPDATE_DIR ?? join(dirname(DATA_FILE), "updates"))
 const COSMETIC_DIR = resolve(process.env.COSMETIC_DIR ?? join(dirname(DATA_FILE), "cosmetics"))
+const ACCOUNT_FILE = resolve(process.env.ACCOUNT_FILE ?? join(dirname(DATA_FILE), "accounts.json"))
+const PUBLIC_DIR = resolve(process.env.PUBLIC_DIR ?? join(HERE, "..", "public"))
+
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? ""
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME ?? ""
 const CLIENT_KEY = process.env.CLIENT_KEY ?? ""
 const PRESENCE_TTL_MS = Number.parseInt(process.env.PRESENCE_TTL_SECONDS ?? "300", 10) * 1000
 const RETENTION_MS = Number.parseInt(process.env.RETENTION_DAYS ?? "7", 10) * 24 * 60 * 60 * 1000
 
 const MAX_BODY_BYTES = 16 * 1024
 const RATE_LIMIT_WINDOW_MS = 60 * 1000
-const RATE_LIMIT_MAX = 120
+const RATE_LIMIT_MAX = 240
+// Guessing a password should be slow, so sign in and sign up get their own much tighter budget.
+const AUTH_LIMIT_MAX = 12
 
 const UPDATE_PREFIX = "/v1/updates"
 const COSMETIC_PREFIX = "/v1/cosmetics"
 const COSMETIC_TEXTURE_PREFIX = `${COSMETIC_PREFIX}/textures`
 const COSMETIC_PLAYER_PREFIX = `${COSMETIC_PREFIX}/player`
+const AUTH_PREFIX = "/v1/auth"
+const ACCOUNT_PREFIX = "/v1/account"
+const ADMIN_PREFIX = "/v1/admin"
+const SESSION_COOKIE = "halcyon_session"
+
 const SAFE_FILE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
 const PLAYER_NAME = /^[A-Za-z0-9_]{1,32}$/
 const CONTENT_TYPES = {
@@ -39,8 +55,10 @@ const CONTENT_TYPES = {
 }
 
 const store = new Store(DATA_FILE, PRESENCE_TTL_MS)
+const accounts = new Accounts(ACCOUNT_FILE, ADMIN_USERNAME)
 const startedAt = Date.now()
 const hits = new Map()
+const authHits = new Map()
 
 /** The path without the query string. Parsed by hand so no base address is needed. */
 function pathOf(request) {
@@ -49,20 +67,24 @@ function pathOf(request) {
 	return mark === -1 ? target : target.slice(0, mark)
 }
 
-function rateLimited(address) {
+function counted(bucket, address, limit) {
 	const now = Date.now()
-	const entry = hits.get(address)
+	const entry = bucket.get(address)
 
 	if (entry === undefined || now - entry.since > RATE_LIMIT_WINDOW_MS) {
-		hits.set(address, { since: now, count: 1 })
+		bucket.set(address, { since: now, count: 1 })
 		return false
 	}
 
 	entry.count += 1
-	return entry.count > RATE_LIMIT_MAX
+	return entry.count > limit
 }
 
-function send(response, status, payload) {
+function rateLimited(address) {
+	return counted(hits, address, RATE_LIMIT_MAX)
+}
+
+function send(response, status, payload, extra = {}) {
 	const body = payload === undefined ? "" : JSON.stringify(payload)
 	response.writeHead(status, {
 		"content-type": "application/json; charset=utf-8",
@@ -71,6 +93,7 @@ function send(response, status, payload) {
 		"access-control-allow-headers": "content-type, authorization, x-halcyon-key",
 		"access-control-allow-methods": "GET, HEAD, POST, PUT, DELETE, OPTIONS",
 		"cache-control": "no-store",
+		...extra,
 	})
 	response.end(body)
 }
@@ -104,6 +127,43 @@ async function readJson(request) {
 	}
 }
 
+function cookies(request) {
+	const header = request.headers.cookie
+	const jar = {}
+	if (typeof header !== "string") {
+		return jar
+	}
+
+	for (const part of header.split(";")) {
+		const mark = part.indexOf("=")
+		if (mark === -1) {
+			continue
+		}
+		try {
+			jar[part.slice(0, mark).trim()] = decodeURIComponent(part.slice(mark + 1).trim())
+		} catch {
+			continue
+		}
+	}
+	return jar
+}
+
+/**
+ * The session cookie. HttpOnly keeps it away from page scripts, SameSite keeps it off other
+ * sites, and there is no Secure flag because the service still answers on plain http.
+ */
+function sessionCookie(token, maxAgeSeconds) {
+	return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}`
+}
+
+function sessionToken(request) {
+	return cookies(request)[SESSION_COOKIE] ?? ""
+}
+
+function currentUser(request) {
+	return accounts.sessionUser(sessionToken(request))
+}
+
 function clientAllowed(request) {
 	if (CLIENT_KEY === "") {
 		return true
@@ -111,11 +171,24 @@ function clientAllowed(request) {
 	return request.headers["x-halcyon-key"] === CLIENT_KEY
 }
 
+/**
+ * Admin work can arrive two ways: a curl call carrying the token, or a signed in owner clicking
+ * around the panel. Both are the same authority, so both are accepted here.
+ */
 function adminAllowed(request) {
-	if (ADMIN_TOKEN === "") {
-		return false
+	if (ADMIN_TOKEN !== "" && request.headers.authorization === `Bearer ${ADMIN_TOKEN}`) {
+		return true
 	}
-	return request.headers.authorization === `Bearer ${ADMIN_TOKEN}`
+	const user = currentUser(request)
+	return user !== null && user.role === "admin"
+}
+
+function requireAdmin(request, response) {
+	if (adminAllowed(request)) {
+		return true
+	}
+	send(response, 401, { error: "an admin token or an admin session is required" })
+	return false
 }
 
 /** The file a request points at below a prefix, or null when the path is not one. */
@@ -229,8 +302,7 @@ async function serveFile(request, response, directory, name) {
 }
 
 async function receiveFile(request, response, directory, name) {
-	if (!adminAllowed(request)) {
-		send(response, 401, { error: "an admin token is required" })
+	if (!requireAdmin(request, response)) {
 		return
 	}
 
@@ -252,8 +324,7 @@ async function receiveFile(request, response, directory, name) {
 }
 
 async function removeFile(request, response, directory, name) {
-	if (!adminAllowed(request)) {
-		send(response, 401, { error: "an admin token is required" })
+	if (!requireAdmin(request, response)) {
 		return
 	}
 
@@ -300,6 +371,221 @@ function validName(value) {
 	return PLAYER_NAME.test(name) ? name : ""
 }
 
+/** The numbers the website shows. Cheap enough to compute on every request. */
+function statistics() {
+	const online = store.onlinePlayers()
+	const known = Object.keys(store.state.players).length
+	const worn = store.wornCapes()
+	const profiles = Object.values(store.state.profiles)
+
+	return {
+		...accounts.stats(),
+		online: online.length,
+		playersKnown: known,
+		cosmetics: store.cosmetics().length,
+		capesWorn: Object.keys(worn).length,
+		playersWithCosmetics: profiles.filter((profile) => (profile.owned ?? []).length > 0).length,
+		uptimeSeconds: Math.round((Date.now() - startedAt) / 1000),
+	}
+}
+
+async function handleAuth(request, response, path) {
+	const route = `${request.method} ${path}`
+
+	if (route === `GET ${AUTH_PREFIX}/me`) {
+		const user = currentUser(request)
+		send(response, 200, { user: accounts.publicUser(user) })
+		return true
+	}
+
+	if (route === `POST ${AUTH_PREFIX}/register`) {
+		const payload = await readJson(request)
+		if (payload === null) {
+			send(response, 400, { error: "the body is not valid json" })
+			return true
+		}
+
+		const result = accounts.register(payload)
+		if (result.error !== undefined) {
+			send(response, 400, { error: result.error })
+			return true
+		}
+
+		const session = accounts.createSession(result.user.username)
+		send(
+			response,
+			201,
+			{ user: accounts.publicUser(result.user) },
+			{ "set-cookie": sessionCookie(session.token, session.maxAgeSeconds) },
+		)
+		console.log(`[halcyon] registered ${result.user.username} as ${result.user.role}`)
+		return true
+	}
+
+	if (route === `POST ${AUTH_PREFIX}/login`) {
+		const payload = await readJson(request)
+		if (payload === null) {
+			send(response, 400, { error: "the body is not valid json" })
+			return true
+		}
+
+		const user = accounts.authenticate(payload.login ?? payload.username, payload.password)
+		if (user === null) {
+			// One message for both cases, so the form cannot be used to discover usernames.
+			send(response, 401, { error: "those details do not match an account" })
+			return true
+		}
+
+		const session = accounts.createSession(user.username)
+		send(
+			response,
+			200,
+			{ user: accounts.publicUser(user) },
+			{ "set-cookie": sessionCookie(session.token, session.maxAgeSeconds) },
+		)
+		return true
+	}
+
+	if (route === `POST ${AUTH_PREFIX}/logout`) {
+		accounts.destroySession(sessionToken(request))
+		send(response, 200, { ok: true }, { "set-cookie": sessionCookie("", 0) })
+		return true
+	}
+
+	return false
+}
+
+async function handleAccount(request, response, path) {
+	if (!path.startsWith(`${ACCOUNT_PREFIX}/`)) {
+		return false
+	}
+
+	const user = currentUser(request)
+	if (user === null) {
+		send(response, 401, { error: "sign in first" })
+		return true
+	}
+
+	const route = `${request.method} ${path}`
+
+	if (route === `GET ${ACCOUNT_PREFIX}/overview`) {
+		const linked = String(user.minecraft ?? "")
+		const profile = linked === "" ? null : store.profile(linked)
+		const owned = (profile?.owned ?? []).map((id) => store.cosmetic(id)).filter(Boolean)
+		send(response, 200, {
+			user: accounts.publicUser(user),
+			profile,
+			owned,
+			announcements: store.announcements(),
+		})
+		return true
+	}
+
+	if (route === `POST ${ACCOUNT_PREFIX}/minecraft`) {
+		const payload = await readJson(request)
+		if (payload === null) {
+			send(response, 400, { error: "the body is not valid json" })
+			return true
+		}
+
+		const result = accounts.linkMinecraft(user.username, payload.minecraft)
+		if (result.error !== undefined) {
+			send(response, 400, { error: result.error })
+			return true
+		}
+		send(response, 200, { user: accounts.publicUser(result.user) })
+		return true
+	}
+
+	if (route === `POST ${ACCOUNT_PREFIX}/password`) {
+		const payload = await readJson(request)
+		if (payload === null) {
+			send(response, 400, { error: "the body is not valid json" })
+			return true
+		}
+
+		const result = accounts.changePassword(user.username, payload.current, payload.next)
+		if (result.error !== undefined) {
+			send(response, 400, { error: result.error })
+			return true
+		}
+		// Every session died with the change, including this one, so the cookie goes too.
+		send(response, 200, { ok: true }, { "set-cookie": sessionCookie("", 0) })
+		return true
+	}
+
+	send(response, 404, { error: "unknown endpoint" })
+	return true
+}
+
+async function handleAdmin(request, response, path) {
+	if (!path.startsWith(`${ADMIN_PREFIX}/`)) {
+		return false
+	}
+	if (!requireAdmin(request, response)) {
+		return true
+	}
+
+	const route = `${request.method} ${path}`
+
+	if (route === `GET ${ADMIN_PREFIX}/overview`) {
+		const grants = Object.values(store.state.profiles)
+			.filter((profile) => (profile.owned ?? []).length > 0)
+			.map((profile) => ({
+				name: profile.name,
+				owned: profile.owned ?? [],
+				equipped: profile.equipped?.cape ?? null,
+			}))
+			.sort((left, right) => left.name.localeCompare(right.name))
+
+		send(response, 200, {
+			stats: statistics(),
+			accounts: accounts.list(),
+			cosmetics: store.cosmetics(),
+			grants,
+			announcements: store.announcements(),
+			branding: store.branding(),
+			players: store.onlinePlayers(),
+		})
+		return true
+	}
+
+	if (route === `POST ${ADMIN_PREFIX}/role`) {
+		const payload = await readJson(request)
+		if (payload === null) {
+			send(response, 400, { error: "the body is not valid json" })
+			return true
+		}
+
+		const result = accounts.setRole(payload.username, payload.role)
+		if (result.error !== undefined) {
+			send(response, 400, { error: result.error })
+			return true
+		}
+		send(response, 200, { user: accounts.publicUser(result.user) })
+		return true
+	}
+
+	if (route === `POST ${ADMIN_PREFIX}/remove-account`) {
+		const payload = await readJson(request)
+		if (payload === null) {
+			send(response, 400, { error: "the body is not valid json" })
+			return true
+		}
+
+		const result = accounts.remove(payload.username)
+		if (result.error !== undefined) {
+			send(response, 400, { error: result.error })
+			return true
+		}
+		send(response, 200, result)
+		return true
+	}
+
+	send(response, 404, { error: "unknown endpoint" })
+	return true
+}
+
 async function handleCosmetics(request, response, path) {
 	const route = `${request.method} ${path}`
 
@@ -309,8 +595,7 @@ async function handleCosmetics(request, response, path) {
 	}
 
 	if (route === `PUT ${COSMETIC_PREFIX}`) {
-		if (!adminAllowed(request)) {
-			send(response, 401, { error: "an admin token is required" })
+		if (!requireAdmin(request, response)) {
 			return true
 		}
 
@@ -378,8 +663,7 @@ async function handleCosmetics(request, response, path) {
 	}
 
 	if (route === `POST ${COSMETIC_PREFIX}/grant` || route === `POST ${COSMETIC_PREFIX}/revoke`) {
-		if (!adminAllowed(request)) {
-			send(response, 401, { error: "an admin token is required" })
+		if (!requireAdmin(request, response)) {
 			return true
 		}
 
@@ -431,8 +715,7 @@ async function handleCosmetics(request, response, path) {
 	}
 
 	if (request.method === "DELETE" && path.startsWith(`${COSMETIC_PREFIX}/`)) {
-		if (!adminAllowed(request)) {
-			send(response, 401, { error: "an admin token is required" })
+		if (!requireAdmin(request, response)) {
 			return true
 		}
 
@@ -462,6 +745,11 @@ async function handle(request, response, path) {
 			uptimeSeconds: Math.round((Date.now() - startedAt) / 1000),
 			online: store.onlinePlayers().length,
 		})
+		return
+	}
+
+	if (route === "GET /v1/stats") {
+		send(response, 200, statistics())
 		return
 	}
 
@@ -512,8 +800,7 @@ async function handle(request, response, path) {
 	}
 
 	if (route === "PUT /v1/branding") {
-		if (!adminAllowed(request)) {
-			send(response, 401, { error: "an admin token is required" })
+		if (!requireAdmin(request, response)) {
 			return
 		}
 
@@ -532,8 +819,7 @@ async function handle(request, response, path) {
 	}
 
 	if (route === "PUT /v1/announcements") {
-		if (!adminAllowed(request)) {
-			send(response, 401, { error: "an admin token is required" })
+		if (!requireAdmin(request, response)) {
 			return
 		}
 
@@ -549,6 +835,18 @@ async function handle(request, response, path) {
 			return
 		}
 		send(response, 200, { announcements: store.updateAnnouncements(entries) })
+		return
+	}
+
+	if (await handleAuth(request, response, path)) {
+		return
+	}
+
+	if (await handleAccount(request, response, path)) {
+		return
+	}
+
+	if (await handleAdmin(request, response, path)) {
 		return
 	}
 
@@ -568,21 +866,38 @@ async function handle(request, response, path) {
 		return
 	}
 
+	// Anything that is not an api call is a page request.
+	if (!path.startsWith("/v1/") && (await serveSite(request, response, path, PUBLIC_DIR))) {
+		return
+	}
+
 	send(response, 404, { error: "unknown endpoint" })
 }
 
 const server = createServer((request, response) => {
 	const address = request.socket.remoteAddress ?? "unknown"
 	const path = pathOf(request)
+	const reading = request.method === "GET" || request.method === "HEAD"
 
-	// Downloading an installer or a cape is a handful of large requests from one machine, so the
-	// counter that protects the small json endpoints does not apply.
-	const downloading =
-		(request.method === "GET" || request.method === "HEAD") &&
-		(path.startsWith(`${UPDATE_PREFIX}/`) || path.startsWith(`${COSMETIC_TEXTURE_PREFIX}/`))
+	// Downloading an installer or a cape is a handful of large requests from one machine, and a
+	// single page view is a dozen small ones, so neither counts against the api budget.
+	const exempt =
+		reading &&
+		(path.startsWith(`${UPDATE_PREFIX}/`) ||
+			path.startsWith(`${COSMETIC_TEXTURE_PREFIX}/`) ||
+			!path.startsWith("/v1/"))
 
-	if (!downloading && rateLimited(address)) {
+	if (!exempt && rateLimited(address)) {
 		send(response, 429, { error: "too many requests" })
+		return
+	}
+
+	if (
+		request.method === "POST" &&
+		path.startsWith(`${AUTH_PREFIX}/`) &&
+		counted(authHits, address, AUTH_LIMIT_MAX)
+	) {
+		send(response, 429, { error: "too many attempts, wait a minute" })
 		return
 	}
 
@@ -599,13 +914,16 @@ setInterval(() => {
 	if (removed > 0) {
 		console.log(`[halcyon] pruned ${removed} stale players`)
 	}
+	accounts.pruneSessions()
 	hits.clear()
+	authHits.clear()
 }, RATE_LIMIT_WINDOW_MS).unref()
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
 	process.on(signal, () => {
 		console.log("[halcyon] shutting down")
 		store.persist()
+		accounts.persist()
 		server.close(() => process.exit(0))
 	})
 }
@@ -619,11 +937,16 @@ for (const directory of [UPDATE_DIR, COSMETIC_DIR]) {
 server.listen(PORT, HOST, () => {
 	console.log(`[halcyon] backend listening on ${HOST} port ${PORT}`)
 	console.log(`[halcyon] state file ${DATA_FILE}`)
+	console.log(`[halcyon] accounts file ${ACCOUNT_FILE}`)
 	console.log(`[halcyon] update folder ${UPDATE_DIR}`)
 	console.log(`[halcyon] cosmetic folder ${COSMETIC_DIR}`)
+	console.log(`[halcyon] website folder ${PUBLIC_DIR}`)
 	if (ADMIN_TOKEN === "") {
 		console.warn(
 			"[halcyon] no admin token is set, branding, cosmetics and uploads are disabled",
 		)
+	}
+	if (accounts.count() === 0) {
+		console.log("[halcyon] no accounts yet, the first one registered becomes the admin")
 	}
 })
