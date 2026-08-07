@@ -120,6 +120,41 @@ jobs:
         with:
           node-version: 22
 
+      - name: Set up Java for the companion mod
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10"
+
+      - name: Build the companion mod
+        working-directory: companion
+        shell: bash
+        run: gradle build --no-daemon
+
+      - name: Stage the companion mod for packaging
+        shell: bash
+        run: |
+          mkdir -p build/companion
+          staged=0
+          for jar in companion/build/libs/*.jar; do
+            [ -f "${jar}" ] || continue
+            case "${jar}" in
+              *-sources.jar | *-dev.jar | *-dev-shadow.jar) continue ;;
+            esac
+            cp "${jar}" build/companion/
+            staged=$((staged + 1))
+          done
+          if [ "${staged}" -eq 0 ]; then
+            echo "The companion mod produced no shippable jar" >&2
+            exit 1
+          fi
+          ls -l build/companion
+
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
