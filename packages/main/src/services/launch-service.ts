@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process"
 import type { ChildProcess } from "node:child_process"
-import { mkdir } from "node:fs/promises"
+import { mkdir, readFile, readdir, stat } from "node:fs/promises"
 import { join } from "node:path"
 import { buildLaunchInvocation, summarizeExitCode } from "@halcyon/core"
 import type { HostPlatform, LaunchSession, UserType, VersionJson } from "@halcyon/core"
@@ -25,6 +25,11 @@ type RunningGame = {
 	readonly startedAtMs: number
 }
 
+/** Only reports written by the run that just ended are worth showing. */
+const CRASH_REPORT_MAX_AGE_MS = 5 * 60 * 1000
+const CRASH_EXCERPT_LINES = 26
+const CRASH_EXCERPT_FRAMES = 8
+
 function loggingConfigId(version: VersionJson): string | undefined {
 	const raw = version as unknown as {
 		logging?: { client?: { file?: { id?: string } } }
@@ -34,6 +39,47 @@ function loggingConfigId(version: VersionJson): string | undefined {
 
 function userTypeFor(kind: "microsoft" | "offline"): UserType {
 	return kind === "microsoft" ? "msa" : "legacy"
+}
+
+/**
+ * Trims a Minecraft crash report down to the part that explains the crash:
+ * the description, the exception and the first few stack frames. The rest of
+ * the report is mostly hardware details that bury the cause.
+ */
+function crashReportExcerpt(content: string): string {
+	const lines = content.split(/\r?\n/)
+	const described = lines.findIndex((line) => line.startsWith("Description:"))
+	const picked: string[] = []
+	let frames = 0
+
+	for (const line of lines.slice(described === -1 ? 0 : described)) {
+		if (picked.length >= CRASH_EXCERPT_LINES) {
+			break
+		}
+		if (line.startsWith("-- ") && picked.length > 0) {
+			break
+		}
+		if (line.trim().startsWith("at ")) {
+			frames += 1
+			if (frames > CRASH_EXCERPT_FRAMES) {
+				continue
+			}
+		}
+		picked.push(line)
+	}
+
+	return picked.join("\n").trim()
+}
+
+function crashHeadline(excerpt: string): string | null {
+	for (const line of excerpt.split("\n")) {
+		const trimmed = line.trim()
+		if (trimmed.length === 0 || trimmed.startsWith("Description:")) {
+			continue
+		}
+		return trimmed
+	}
+	return null
 }
 
 export class LaunchService {
@@ -285,17 +331,72 @@ export class LaunchService {
 		loader: string,
 		gameVersion: string,
 	): Promise<void> {
-		if (!this.companion.supports({ id: instanceId, name, loader, gameVersion })) {
-			return
-		}
-
-		this.progress(instanceId, "installing", "Preparing the Halcyon companion mod", 0.62)
+		this.progress(instanceId, "installing", "Checking the Halcyon companion mod", 0.62)
 		try {
 			const outcome = await this.companion.ensure({ id: instanceId, name, loader, gameVersion })
 			this.logger.info(outcome.detail)
 		} catch (error) {
 			this.logger.warn(`The companion mod could not be prepared for ${name}`, error)
 		}
+	}
+
+	/**
+	 * Copies the useful part of the crash report Minecraft just wrote into the
+	 * instance log, so the reason for the crash is visible in the launcher
+	 * instead of hidden in a file on disk.
+	 */
+	private async collectCrashReport(instanceId: string): Promise<string | null> {
+		const directory = join(this.instances.gameDirectory(instanceId), "crash-reports")
+
+		let entries: string[] = []
+		try {
+			entries = await readdir(directory)
+		} catch {
+			return null
+		}
+
+		let newestPath: string | null = null
+		let newestAtMs = 0
+		for (const name of entries) {
+			if (!name.endsWith(".txt")) {
+				continue
+			}
+			const candidate = join(directory, name)
+			try {
+				const info = await stat(candidate)
+				if (info.mtimeMs > newestAtMs) {
+					newestAtMs = info.mtimeMs
+					newestPath = candidate
+				}
+			} catch {
+				continue
+			}
+		}
+
+		if (newestPath === null || Date.now() - newestAtMs > CRASH_REPORT_MAX_AGE_MS) {
+			return null
+		}
+
+		let content = ""
+		try {
+			content = await readFile(newestPath, "utf8")
+		} catch (error) {
+			this.logger.warn(`The crash report at ${newestPath} could not be read`, error)
+			return null
+		}
+
+		const excerpt = crashReportExcerpt(content)
+		if (excerpt.length === 0) {
+			return null
+		}
+
+		this.logs.append(
+			instanceId,
+			`\nMinecraft wrote a crash report to ${newestPath}\n${excerpt}\n`,
+			"error",
+		)
+		this.logger.warn(`Crash report for ${instanceId}: ${excerpt}`)
+		return crashHeadline(excerpt)
 	}
 
 	private async handleExit(
@@ -320,12 +421,13 @@ export class LaunchService {
 		this.progress(instanceId, "exited", summary, 1, code)
 
 		if (code !== 0 && code !== null) {
+			const headline = await this.collectCrashReport(instanceId)
 			const diagnoses = await this.logs.analyze(instanceId)
 			const first = diagnoses[0]
 			this.events.toast(
 				"error",
 				first?.title ?? "Minecraft closed unexpectedly",
-				first?.explanation ?? summary,
+				first?.explanation ?? headline ?? summary,
 			)
 			this.logger.warn(`${summary} (instance ${instanceId})`)
 			return
