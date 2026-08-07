@@ -10,13 +10,23 @@ import type { Logger } from "../infra/logger.ts"
 const requireCjs = createRequire(import.meta.url)
 const { autoUpdater } = requireCjs("electron-updater") as { autoUpdater: AppUpdater }
 
+// Halcyon serves its own installers, so update checks no longer need a GitHub
+// token or a public repository. Set HALCYON_UPDATE_URL to point somewhere else,
+// or to "github" to fall back to the release feed on GitHub.
+const DEFAULT_FEED_URL = "http://85.215.223.254:8787/v1/updates"
+const GITHUB_FEED = "github"
+
 const UNREADABLE_FEED = /releases\.atom|authentication token is correct|401|403|404/i
 const OFFLINE = /ENOTFOUND|EAI_AGAIN|ETIMEDOUT|ECONNRESET|ECONNREFUSED|net::ERR/i
+const EMPTY_FEED = /404|ENOENT|no such file|not found|cannot parse/i
 
 const UNREADABLE_FEED_MESSAGE =
 	"The private update feed needs access. Set HALCYON_GITHUB_TOKEN to a fine-grained, " +
 	"read-only token for YugiYX-real/YugiClient and restart Halcyon."
 const OFFLINE_MESSAGE = "Update checks are unavailable because the launcher is offline."
+const UNREACHABLE_MESSAGE =
+	"The Halcyon update server did not answer. The launcher keeps working and tries again later."
+const EMPTY_FEED_MESSAGE = "The update server has no published version yet."
 
 export type UpdateHistoryState = { installedVersions: string[] }
 
@@ -39,20 +49,18 @@ function releaseNotesOf(info: UpdateInfo): string | null {
 	return null
 }
 
-function explain(error: unknown): string {
-	const message = error instanceof Error ? error.message : String(error)
-	if (OFFLINE.test(message)) {
-		return OFFLINE_MESSAGE
-	}
-	if (UNREADABLE_FEED.test(message)) {
-		return UNREADABLE_FEED_MESSAGE
-	}
-	return message
-}
-
 function updateToken(): string | undefined {
 	const token = process.env.HALCYON_GITHUB_TOKEN?.trim()
 	return token === undefined || token === "" ? undefined : token
+}
+
+/** The self hosted feed, or null when updates should come from GitHub. */
+function configuredFeed(): string | null {
+	const value = process.env.HALCYON_UPDATE_URL?.trim()
+	if (value === undefined || value === "") {
+		return DEFAULT_FEED_URL
+	}
+	return value.toLowerCase() === GITHUB_FEED ? null : value.replace(/\/+$/, "")
 }
 
 export class UpdateService {
@@ -60,6 +68,7 @@ export class UpdateService {
 	private readonly events: EventBus
 	private readonly history: JsonStore<UpdateHistoryState>
 	private readonly currentVersion: string
+	private readonly feed: string | null
 	private state: UpdateStatus
 
 	constructor(dependencies: {
@@ -72,6 +81,7 @@ export class UpdateService {
 		this.events = dependencies.events
 		this.history = dependencies.history
 		this.currentVersion = dependencies.currentVersion
+		this.feed = configuredFeed()
 		this.state = {
 			state: "idle",
 			currentVersion: dependencies.currentVersion,
@@ -88,13 +98,25 @@ export class UpdateService {
 		autoUpdater.autoInstallOnAppQuit = true
 		autoUpdater.allowDowngrade = false
 
-		const token = updateToken()
-		if (token !== undefined) {
-			// The private GitHub provider reads GH_TOKEN lazily when the first check starts.
-			// Keep the user-owned token out of packaged files and persistent launcher data.
-			process.env.GH_TOKEN = token
-			autoUpdater.addAuthHeader(`token ${token}`)
-			this.logger.info("Authenticated access to the private update feed is enabled")
+		if (this.feed === null) {
+			const token = updateToken()
+			if (token !== undefined) {
+				// The private GitHub provider reads GH_TOKEN lazily when the first check starts.
+				// Keep the user-owned token out of packaged files and persistent launcher data.
+				process.env.GH_TOKEN = token
+				autoUpdater.addAuthHeader(`token ${token}`)
+				this.logger.info("Authenticated access to the private update feed is enabled")
+			}
+		} else {
+			autoUpdater.setFeedURL({
+				provider: "generic",
+				url: this.feed,
+				channel: "latest",
+				// The backend answers one byte range per request, which is all the
+				// downloader needs when it is told not to ask for several at once.
+				useMultipleRangeRequest: false,
+			})
+			this.logger.info(`Updates are read from ${this.feed}`)
 		}
 
 		autoUpdater.on("checking-for-update", () => {
@@ -128,7 +150,7 @@ export class UpdateService {
 		})
 		autoUpdater.on("error", (error: Error) => {
 			this.logger.warn("The updater reported a problem", error)
-			this.patch({ state: "error", error: explain(error) })
+			this.patch({ state: "error", error: this.explain(error) })
 		})
 
 		await this.history.update((current) => ({
@@ -139,6 +161,20 @@ export class UpdateService {
 		}))
 
 		this.patch({ canRollback: (await this.previousVersion()) !== undefined })
+	}
+
+	private explain(error: unknown): string {
+		const message = error instanceof Error ? error.message : String(error)
+		if (OFFLINE.test(message)) {
+			return this.feed === null ? OFFLINE_MESSAGE : UNREACHABLE_MESSAGE
+		}
+		if (this.feed !== null) {
+			return EMPTY_FEED.test(message) ? EMPTY_FEED_MESSAGE : message
+		}
+		if (UNREADABLE_FEED.test(message)) {
+			return UNREADABLE_FEED_MESSAGE
+		}
+		return message
 	}
 
 	private async previousVersion(): Promise<string | undefined> {
@@ -160,7 +196,7 @@ export class UpdateService {
 			await autoUpdater.checkForUpdates()
 		} catch (error) {
 			this.logger.warn("Could not check for updates", error)
-			this.patch({ state: "error", error: explain(error) })
+			this.patch({ state: "error", error: this.explain(error) })
 		}
 		return this.state
 	}
@@ -171,7 +207,7 @@ export class UpdateService {
 			await autoUpdater.downloadUpdate()
 		} catch (error) {
 			this.logger.warn("Could not download the update", error)
-			this.patch({ state: "error", error: explain(error) })
+			this.patch({ state: "error", error: this.explain(error) })
 		}
 		return this.state
 	}

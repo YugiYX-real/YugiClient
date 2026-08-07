@@ -89,6 +89,29 @@
 	justify-content: flex-end;
 }
 
+/*
+ * Picture previews in dialogs reuse the .art class, but the sizing and cropping
+ * rules for it were scoped to .instance-tile. A bare .art box therefore fell
+ * back to background-size: auto, which paints the chosen file at its real pixel
+ * size anchored top left, so a large photo showed only its top left corner.
+ * These base rules make every .art box crop its picture to fit.
+ */
+.art {
+	position: relative;
+	border-radius: var(--radius-sm);
+	border: 1px solid var(--border);
+	background-color: rgba(11, 14, 20, 0.55);
+	background-image: linear-gradient(135deg, var(--accent-soft), rgba(57, 224, 200, 0.2));
+	background-size: cover;
+	background-position: center;
+	background-repeat: no-repeat;
+	display: grid;
+	place-items: center;
+	overflow: hidden;
+	font-size: 1.4rem;
+	color: var(--text);
+}
+
 .instance-tile .art {
 	width: 72px;
 	height: 72px;
