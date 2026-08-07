@@ -13,7 +13,7 @@ const PERSIST_DELAY_MS = 2000
 // Cosmetic ids end up in urls and file names, so they are kept to a short lowercase slug.
 const COSMETIC_ID = /^[a-z0-9][a-z0-9_-]{0,47}$/
 
-/** The most frames one cosmetic may be built from, whether stacked or uploaded one by one. */
+/** The most frames one cosmetic may be built from, whether stacked, uploaded or split from a gif. */
 const MAX_FRAMES = 64
 
 /**
@@ -39,6 +39,25 @@ export const COSMETIC_SLOTS = Array.from(
 	new Set(Object.values(COSMETIC_TYPES).map((entry) => entry.slot)),
 )
 
+/**
+ * How each kind is placed on the player unless the owner says otherwise.
+ *
+ * A cape is a flat sheet that hangs from the shoulders, but wings stand off the back and are drawn
+ * as a mirrored pair, and a halo floats above the head. Those differences are data, not code, so a
+ * new kind of cosmetic only needs a sensible line here.
+ */
+const GEOMETRY = {
+	cape: { scale: 1, offsetX: 0, offsetY: 0, offsetZ: 0, flap: 0, mirror: false, glow: false },
+	wings: { scale: 1.4, offsetX: 0, offsetY: 0.15, offsetZ: 0.12, flap: 0.6, mirror: true, glow: false },
+	backpack: { scale: 0.8, offsetX: 0, offsetY: 0, offsetZ: 0.1, flap: 0, mirror: false, glow: false },
+	hat: { scale: 1, offsetX: 0, offsetY: 0.05, offsetZ: 0, flap: 0, mirror: false, glow: false },
+	halo: { scale: 1, offsetX: 0, offsetY: 0.45, offsetZ: 0, flap: 0, mirror: false, glow: true },
+	mask: { scale: 1, offsetX: 0, offsetY: 0, offsetZ: 0, flap: 0, mirror: false, glow: false },
+	shoulder: { scale: 0.6, offsetX: 0.3, offsetY: 0.2, offsetZ: 0, flap: 0, mirror: false, glow: false },
+	aura: { scale: 1.6, offsetX: 0, offsetY: 0, offsetZ: 0, flap: 0.2, mirror: false, glow: true },
+	trail: { scale: 1, offsetX: 0, offsetY: 0, offsetZ: 0, flap: 0.3, mirror: false, glow: true },
+}
+
 const RARITIES = ["common", "uncommon", "rare", "epic", "legendary", "exclusive"]
 
 /** Returns the cleaned cosmetic id, or an empty string when the value cannot be used. */
@@ -57,6 +76,11 @@ export function slotOf(type) {
 	return COSMETIC_TYPES[normaliseCosmeticType(type)].slot
 }
 
+/** The default placement for a kind of cosmetic. */
+export function geometryOf(type) {
+	return GEOMETRY[normaliseCosmeticType(type)] ?? GEOMETRY.cape
+}
+
 function normaliseRarity(value) {
 	const text = typeof value === "string" ? value.trim().toLowerCase() : ""
 	return RARITIES.includes(text) ? text : "common"
@@ -65,9 +89,10 @@ function normaliseRarity(value) {
 /**
  * The addresses of the pictures an animation is built from, one per frame.
  *
- * This is how an owner brings an animation of their own: upload a picture for every frame and the
- * client plays them in this order, in the world as well as in the wardrobe. Anything that is not a
- * usable address is dropped rather than stored, so a bad entry cannot break a client later.
+ * This is how an owner brings an animation of their own: upload a gif, or a picture for every
+ * frame, and the client plays them in this order, in the world as well as in the wardrobe.
+ * Anything that is not a usable address is dropped rather than stored, so a bad entry cannot break
+ * a client later.
  */
 function normaliseFrameTextures(value) {
 	if (!Array.isArray(value)) {
@@ -97,6 +122,19 @@ function clamp(value, low, high, fallback) {
 		return fallback
 	}
 	return Math.min(high, Math.max(low, Math.round(number)))
+}
+
+/** The same as clamp, but for placement values that are meant to be fractional. */
+function decimal(value, low, high, fallback) {
+	const number = typeof value === "number" ? value : Number.parseFloat(String(value ?? ""))
+	if (!Number.isFinite(number)) {
+		return fallback
+	}
+	return Math.round(Math.min(high, Math.max(low, number)) * 1000) / 1000
+}
+
+function flag(value, fallback) {
+	return typeof value === "boolean" ? value : fallback
 }
 
 /** Players are addressed case insensitively everywhere. */
@@ -195,7 +233,8 @@ export class Store {
 			if (
 				record.slot === undefined ||
 				record.animated === undefined ||
-				record.frameTextures === undefined
+				record.frameTextures === undefined ||
+				record.scale === undefined
 			) {
 				this.state.cosmetics[id] = this.shapeCosmetic(id, record, record)
 				touched = true
@@ -346,6 +385,7 @@ export class Store {
 		const type = normaliseCosmeticType(entry.type ?? existing.type)
 		const frameTextures = normaliseFrameTextures(entry.frameTextures ?? existing.frameTextures)
 		const separate = frameTextures.length > 1
+		const placement = geometryOf(type)
 
 		// A set of uploaded frames is an animation by definition, so it decides both answers and
 		// the switch in the panel only matters for a stacked strip.
@@ -377,6 +417,15 @@ export class Store {
 			animated: animated && frames > 1,
 			frames: animated ? Math.max(2, frames) : 1,
 			frameMs: clamp(entry.frameMs ?? existing.frameMs, 20, 5000, 100),
+			// How the thing is actually worn. Wings need to stand off the back and beat, a halo
+			// needs to float, and the owner can tune any of it per cosmetic.
+			scale: decimal(entry.scale ?? existing.scale, 0.1, 4, placement.scale),
+			offsetX: decimal(entry.offsetX ?? existing.offsetX, -2, 2, placement.offsetX),
+			offsetY: decimal(entry.offsetY ?? existing.offsetY, -2, 2, placement.offsetY),
+			offsetZ: decimal(entry.offsetZ ?? existing.offsetZ, -2, 2, placement.offsetZ),
+			flap: decimal(entry.flap ?? existing.flap, 0, 1, placement.flap),
+			mirror: flag(entry.mirror ?? existing.mirror, placement.mirror),
+			glow: flag(entry.glow ?? existing.glow, placement.glow),
 			createdAt: existing.createdAt ?? new Date().toISOString(),
 		}
 	}
