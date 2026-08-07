@@ -1,11 +1,19 @@
 name: Test
 
+# The Build workflow already lints, type checks and tests every push on Linux,
+# so this workflow exists for the cross platform sweep only. Running it on
+# every push meant paying twice for Linux, twice over for Windows and ten times
+# over for macOS, which is why it is now asked for rather than automatic.
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      allPlatforms:
+        description: "Verify on Windows and macOS as well as Linux"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: test-${{ github.ref }}
@@ -21,7 +29,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(vars.TEST_MATRIX || '["ubuntu-latest","windows-latest","macos-latest"]') }}
+        os: ${{ fromJSON(vars.TEST_MATRIX || (inputs.allPlatforms && '["ubuntu-latest","windows-latest","macos-latest"]' || '["ubuntu-latest"]')) }}
     steps:
       - name: Use unix line endings for every checkout
         shell: bash
