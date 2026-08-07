@@ -17,6 +17,9 @@ const DISABLED_SUFFIX = ".disabled"
 /** How many unknown files are hashed and looked up during a single listing. */
 const ARTWORK_BATCH = 25
 
+/** Every file the launcher installs to run Halcyon itself carries this prefix. */
+const COMPANION_PREFIX = "halcyon-companion"
+
 export type ContentRecord = {
 	fileName: string
 	kind: ContentKind
@@ -61,6 +64,15 @@ function baseName(fileName: string): string {
 	return fileName.endsWith(DISABLED_SUFFIX)
 		? fileName.slice(0, -DISABLED_SUFFIX.length)
 		: fileName
+}
+
+/**
+ * The companion is part of Halcyon rather than something the player chose to install. The launcher
+ * reinstalls it on every launch, so letting it appear in the mod list would only invite a fight
+ * nobody can win: it is hidden from every listing and refuses to be disabled or deleted.
+ */
+function isCompanion(fileName: string, kind: ContentKind): boolean {
+	return kind === "mod" && baseName(fileName).toLowerCase().startsWith(COMPANION_PREFIX)
 }
 
 function prettyName(fileName: string): string {
@@ -152,7 +164,9 @@ export class ContentService {
 
 	private async collect(instanceId: string, kind: ContentKind): Promise<readonly ContentEntry[]> {
 		const directory = this.directory(instanceId, kind)
-		const files = await listFiles(directory, extensionsFor(kind))
+		const files = (await listFiles(directory, extensionsFor(kind))).filter(
+			(fileName) => !isCompanion(fileName, kind),
+		)
 		const { records } = await this.index(instanceId).read()
 
 		const entries: ContentEntry[] = []
@@ -340,6 +354,9 @@ export class ContentService {
 	): Promise<void> {
 		const directory = this.directory(instanceId, kind)
 		for (const fileName of fileNames) {
+			if (isCompanion(fileName, kind)) {
+				continue
+			}
 			const target = enabled ? baseName(fileName) : `${baseName(fileName)}${DISABLED_SUFFIX}`
 			if (target === fileName) {
 				continue
@@ -359,13 +376,15 @@ export class ContentService {
 		fileNames: readonly string[],
 	): Promise<void> {
 		const directory = this.directory(instanceId, kind)
-		for (const fileName of fileNames) {
+		const removable = fileNames.filter((fileName) => !isCompanion(fileName, kind))
+
+		for (const fileName of removable) {
 			await removePath(join(directory, fileName))
 		}
 		await this.index(instanceId).update((current) => ({
 			records: current.records.filter(
 				(record) =>
-					!fileNames.some((fileName) => baseName(fileName) === baseName(record.fileName)),
+					!removable.some((fileName) => baseName(fileName) === baseName(record.fileName)),
 			),
 		}))
 		this.events.emit("instances:changed", { instanceId })
@@ -533,6 +552,7 @@ export class ContentService {
 				record.kind === kind &&
 				record.latestVersionId !== null &&
 				record.latestVersionId !== record.versionId &&
+				!isCompanion(record.fileName, record.kind) &&
 				(fileNames.length === 0 ||
 					fileNames.some((fileName) => baseName(fileName) === baseName(record.fileName))),
 		)
@@ -573,6 +593,10 @@ export class ContentService {
 		)
 
 		for (const record of records) {
+			if (isCompanion(record.fileName, record.kind)) {
+				continue
+			}
+
 			for (const dependency of record.dependencies) {
 				if (dependency.kind !== "required" || dependency.projectId === null) {
 					continue

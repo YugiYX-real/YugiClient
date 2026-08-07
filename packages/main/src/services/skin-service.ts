@@ -24,6 +24,20 @@ type MinecraftAppearanceProfile = {
 	}[]
 }
 
+/**
+ * Identifies a texture by its hash, which is the last segment of the url.
+ *
+ * Cape urls are stored on the account only after being rewritten to https, while Mojang keeps
+ * reporting them over http. Comparing the two strings therefore never matches and every cape looked
+ * unavailable. The hash is stable across both spellings, so it is what the two lists are joined on.
+ */
+function textureKey(url: string): string {
+	const trimmed = url.trim().toLowerCase()
+	const withoutQuery = trimmed.split("?")[0] ?? trimmed
+	const segments = withoutQuery.split("/").filter((segment) => segment !== "")
+	return segments[segments.length - 1] ?? withoutQuery
+}
+
 export type SkinState = { entries: SkinEntry[] }
 
 export const DEFAULT_SKIN_STATE: SkinState = { entries: [] }
@@ -152,13 +166,28 @@ export class SkinService {
 			return
 		}
 
-		const capeUrl = decodeURIComponent(encodedCape)
+		const wanted = decodeURIComponent(encodedCape)
 		const profile = await this.http.json<MinecraftAppearanceProfile>(PROFILE_URL, {
 			headers: { Authorization: `Bearer ${token}` },
 		})
-		const cape = profile.capes?.find((candidate) => candidate.url === capeUrl)
+		const capes = profile.capes ?? []
+		const key = textureKey(wanted)
+
+		const cape =
+			capes.find((candidate) => candidate.id === wanted) ??
+			capes.find((candidate) => textureKey(candidate.url) === key) ??
+			capes.find((candidate) => (candidate.alias ?? "").toLowerCase() === key)
+
 		if (cape === undefined) {
-			throw new Error("That cape is not available on the selected Minecraft account")
+			const owned = capes
+				.map((candidate) => candidate.alias ?? candidate.id)
+				.filter((name) => name !== "")
+				.join(", ")
+			throw new Error(
+				owned === ""
+					? "This Minecraft account does not own any capes"
+					: `Minecraft no longer lists that cape on this account. It owns: ${owned}`,
+			)
 		}
 
 		await this.http.request(ACTIVE_CAPE_URL, {
