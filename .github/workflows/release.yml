@@ -102,13 +102,17 @@ jobs:
           path: RELEASE_NOTES.md
           retention-days: 30
 
+  # On a private repository Windows runners bill at twice the Linux rate and
+  # macOS at ten times, so only Windows is built by default. Set the
+  # RELEASE_MATRIX repository variable to the three platform matrix when a full
+  # cross platform release is wanted and the minutes are there to pay for it.
   publish:
     name: Publish ${{ matrix.label }} assets
     needs: prepare
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(vars.RELEASE_MATRIX || '{"include":[{"label":"windows","flag":"--win","runner":"windows-latest"},{"label":"linux","flag":"--linux","runner":"ubuntu-latest"},{"label":"macos","flag":"--mac","runner":"macos-latest"}]}') }}
+      matrix: ${{ fromJSON(vars.RELEASE_MATRIX || '{"include":[{"label":"windows","flag":"--win","runner":"windows-latest"}]}') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
