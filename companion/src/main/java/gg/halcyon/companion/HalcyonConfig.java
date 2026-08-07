@@ -13,6 +13,16 @@ import java.nio.file.Path;
 public final class HalcyonConfig {
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
+	/**
+	 * The official Halcyon backend.
+	 *
+	 * <p>This is a default rather than an empty string on purpose: a mod that ships with no address
+	 * reports "no backend configured" in the corner and shows nobody their cosmetics, which is
+	 * exactly the state every fresh instance used to start in. The launcher overwrites this per
+	 * instance, and anybody self hosting can point it somewhere else.
+	 */
+	public static final String DEFAULT_BACKEND = "http://85.215.223.254:8787";
+
 	private static HalcyonConfig instance;
 
 	/** Draw the Halcyon badge in front of the name of a Halcyon player. */
@@ -35,8 +45,8 @@ public final class HalcyonConfig {
 	/** Optional plain roster endpoint that lists the players running Halcyon. */
 	public String rosterUrl = "";
 
-	/** Base address of the Halcyon backend, for example https://halcyon.example.com. */
-	public String backendUrl = "";
+	/** Base address of the Halcyon backend. Empty falls back to {@link #DEFAULT_BACKEND}. */
+	public String backendUrl = DEFAULT_BACKEND;
 
 	/** Optional shared secret expected by the backend. */
 	public String backendKey = "";
@@ -88,6 +98,7 @@ public final class HalcyonConfig {
 				String raw = Files.readString(path, StandardCharsets.UTF_8);
 				HalcyonConfig parsed = GSON.fromJson(raw, HalcyonConfig.class);
 				if (parsed != null) {
+					parsed.migrate();
 					return parsed;
 				}
 			} catch (IOException | RuntimeException error) {
@@ -98,6 +109,34 @@ public final class HalcyonConfig {
 		HalcyonConfig fresh = new HalcyonConfig();
 		fresh.save();
 		return fresh;
+	}
+
+	/**
+	 * Repairs a config written by an older build. Instances created before the backend shipped hold
+	 * an empty address, and leaving it empty is never what the player wanted.
+	 */
+	private void migrate() {
+		boolean changed = false;
+		if (backendUrl == null || backendUrl.isBlank()) {
+			backendUrl = DEFAULT_BACKEND;
+			changed = true;
+		}
+		if (badgeText == null || badgeText.isBlank()) {
+			badgeText = "\u2726";
+			changed = true;
+		}
+		if (badgeColor == null || badgeColor.isBlank()) {
+			badgeColor = "#8B7CF6";
+			changed = true;
+		}
+		if (changed) {
+			save();
+		}
+	}
+
+	/** The address to call, never blank. */
+	public String backend() {
+		return backendUrl == null || backendUrl.isBlank() ? DEFAULT_BACKEND : backendUrl.trim();
 	}
 
 	public void save() {

@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readdir, rm, stat } from "node:fs/promises"
+import { copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { pathExists } from "../infra/fs-extra.ts"
 import type { HttpClient } from "../infra/http.ts"
@@ -9,6 +9,13 @@ const MODRINTH_API = "https://api.modrinth.com/v2"
 const FABRIC_API_PROJECT = "fabric-api"
 const COMPANION_FILE_NAME = "halcyon-companion.jar"
 const COMPANION_PREFIX = "halcyon-companion"
+const CONFIG_FILE_NAME = "halcyon-companion.json"
+
+/**
+ * The Halcyon service the mod talks to. An instance that carries no address reports "no backend
+ * configured" in game and shows nobody their cosmetics, so the launcher always writes one.
+ */
+export const DEFAULT_BACKEND_URL = "http://85.215.223.254:8787"
 
 /**
  * The companion mod is compiled against one set of Yarn mappings, and a mixin
@@ -44,13 +51,16 @@ type RawFabricVersion = {
 	readonly files: readonly RawFabricFile[]
 }
 
+/** Reads back as a plain record so unknown keys written by the mod survive a rewrite. */
+type CompanionConfig = Record<string, unknown>
+
 /**
  * Keeps the in game companion mod in step with the launcher.
  *
- * Every launch of a supported instance refreshes the bundled jar, which is what
- * lets instances that already exist pick up a new build without the player
- * having to reinstall anything by hand. The mod needs Fabric API, so that is
- * fetched from Modrinth the first time an instance is prepared.
+ * Every launch of a supported instance refreshes the bundled jar and the config beside it, which
+ * is what lets instances that already exist pick up a new build, and the backend address, without
+ * the player having to edit anything by hand. The mod needs Fabric API, so that is fetched from
+ * Modrinth the first time an instance is prepared.
  */
 export class CompanionService {
 	private readonly instances: InstanceService
@@ -68,13 +78,21 @@ export class CompanionService {
 		return target.loader === "fabric" && SUPPORTED_GAME_VERSIONS.includes(target.gameVersion)
 	}
 
+	/** The address the launcher and the mod both use, overridable for a self hosted service. */
+	backendUrl(): string {
+		const override = process.env["HALCYON_BACKEND_URL"]
+		const trimmed = override === undefined ? "" : override.trim()
+		return trimmed === "" ? DEFAULT_BACKEND_URL : trimmed.replace(/\/+$/u, "")
+	}
+
 	/**
 	 * Runs for every launch, including unsupported instances, because an
 	 * instance that was moved to a newer game version must lose the mod again
 	 * rather than crash on a mixin that no longer matches.
 	 */
 	async ensure(target: CompanionTarget): Promise<CompanionOutcome> {
-		const modsDirectory = join(this.instances.gameDirectory(target.id), "mods")
+		const gameDirectory = this.instances.gameDirectory(target.id)
+		const modsDirectory = join(gameDirectory, "mods")
 
 		if (!this.supports(target)) {
 			const removed = await this.removeCompanionJars(modsDirectory, null)
@@ -117,6 +135,8 @@ export class CompanionService {
 			join(modsDirectory, COMPANION_FILE_NAME),
 		)
 
+		await this.writeConfig(gameDirectory, target)
+
 		let api = ""
 		try {
 			api = (await this.ensureFabricApi(modsDirectory, target.gameVersion))
@@ -132,6 +152,59 @@ export class CompanionService {
 			installed: true,
 			detail: verb + " the Halcyon companion mod in " + target.name + api,
 		}
+	}
+
+	/**
+	 * Writes the mod config into the instance, keeping every choice the player already made.
+	 *
+	 * Only the backend address is forced, and only when it is missing or still points at the empty
+	 * default, because an instance without it is the one that says "no backend configured" and
+	 * hides the capes that were granted to that account.
+	 */
+	private async writeConfig(gameDirectory: string, target: CompanionTarget): Promise<void> {
+		const directory = join(gameDirectory, "config")
+		const file = join(directory, CONFIG_FILE_NAME)
+		const current = await this.readConfig(file)
+		const existing = current["backendUrl"]
+		const configured = typeof existing === "string" ? existing.trim() : ""
+
+		const next: CompanionConfig = { ...current }
+		if (configured === "") {
+			next["backendUrl"] = this.backendUrl()
+		}
+
+		const key = process.env["HALCYON_CLIENT_KEY"]
+		if (key !== undefined && key.trim() !== "") {
+			next["backendKey"] = key.trim()
+		} else if (typeof next["backendKey"] !== "string") {
+			next["backendKey"] = ""
+		}
+
+		if (JSON.stringify(next) === JSON.stringify(current)) {
+			return
+		}
+
+		try {
+			await mkdir(directory, { recursive: true })
+			await writeFile(file, JSON.stringify(next, null, "\t"), "utf8")
+			this.logger.info("Pointed " + target.name + " at " + String(next["backendUrl"]))
+		} catch (error) {
+			// A config that cannot be written costs cosmetics, never the launch itself.
+			this.logger.warn("The companion config could not be written for " + target.name, error)
+		}
+	}
+
+	private async readConfig(file: string): Promise<CompanionConfig> {
+		try {
+			const raw = await readFile(file, "utf8")
+			const parsed: unknown = JSON.parse(raw)
+			if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+				return parsed as CompanionConfig
+			}
+		} catch {
+			// Missing or corrupt, either way the mod defaults are the right starting point.
+		}
+		return {}
 	}
 
 	private async copyWhenChanged(source: string, destination: string): Promise<boolean> {
