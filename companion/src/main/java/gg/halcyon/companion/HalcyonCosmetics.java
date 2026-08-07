@@ -37,8 +37,13 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p>A cosmetic is more than a cape now. Every entry carries a kind, which decides both the tab it
  * appears under in game and the slot it occupies, so wings and a hat can be worn at the same time
- * while two capes cannot. Entries can also be animated, in which case the picture is a single tall
- * strip of frames played on a loop.
+ * while two capes cannot.
+ *
+ * <p>Animation comes in two shapes. The owner can hand the panel a set of pictures, one per frame,
+ * which arrive here as a list of addresses and are played by swapping the whole texture; that is
+ * the way to make an animation of your own, and it animates in the world as well as in the menu.
+ * A single tall strip of frames is also understood, which is how the first animated capes were
+ * built.
  */
 public final class HalcyonCosmetics {
 	/**
@@ -65,9 +70,13 @@ public final class HalcyonCosmetics {
 
 	private static final long INTERVAL_MS = 60L * 1000L;
 
+	/** How long to leave a picture alone after a failed download. */
+	private static final long RETRY_MS = 30L * 1000L;
+
 	private final HttpClient http =
 			HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 
+	/** One entry per frame, keyed by id and frame number. */
 	private final ConcurrentHashMap<String, Identifier> textures = new ConcurrentHashMap<>();
 
 	private final ConcurrentHashMap<String, int[]> sizes = new ConcurrentHashMap<>();
@@ -75,6 +84,11 @@ public final class HalcyonCosmetics {
 	private final ConcurrentHashMap<String, String> kinds = new ConcurrentHashMap<>();
 
 	private final ConcurrentHashMap<String, int[]> animations = new ConcurrentHashMap<>();
+
+	/** The addresses of the frame pictures, when the owner uploaded one file per frame. */
+	private final ConcurrentHashMap<String, List<String>> frameUrls = new ConcurrentHashMap<>();
+
+	private final ConcurrentHashMap<String, Long> retryAt = new ConcurrentHashMap<>();
 
 	private final Set<String> pending = ConcurrentHashMap.newKeySet();
 
@@ -176,11 +190,16 @@ public final class HalcyonCosmetics {
 	}
 
 	public boolean isAnimated(String id) {
-		int[] animation = animations.get(id);
-		return animation != null && animation[0] > 1;
+		return frames(id) > 1;
 	}
 
+	/** How many frames the picture has, one when it does not move. */
 	public int frames(String id) {
+		List<String> urls = frameUrls.get(id);
+		if (urls != null && urls.size() > 1) {
+			return urls.size();
+		}
+
 		int[] animation = animations.get(id);
 		return animation == null ? 1 : Math.max(1, animation[0]);
 	}
@@ -190,13 +209,23 @@ public final class HalcyonCosmetics {
 		return animation == null ? 100 : Math.max(20, animation[1]);
 	}
 
-	/** Which frame of an animated picture is showing right now. */
+	/** Which frame is showing right now. */
 	public int frameAt(String id, long now) {
 		int count = frames(id);
 		if (count <= 1) {
 			return 0;
 		}
 		return (int) ((now / frameMs(id)) % count);
+	}
+
+	/**
+	 * True when the frames live inside one tall picture rather than in a file each, in which case
+	 * playing it means sliding a window down the strip instead of swapping textures.
+	 */
+	public boolean isStrip(String id) {
+		List<String> urls = frameUrls.get(id);
+		boolean separate = urls != null && urls.size() > 1;
+		return !separate && frames(id) > 1;
 	}
 
 	public boolean isOwned(String id) {
@@ -333,22 +362,27 @@ public final class HalcyonCosmetics {
 		return texture(cape);
 	}
 
-	/** The texture of one cosmetic, starting the download when it is not cached yet. */
+	/**
+	 * The picture of one cosmetic as it should look right now, starting the download when it is not
+	 * cached yet. An animation built from separate frames returns a different texture as the clock
+	 * moves, which is what makes it play everywhere it is drawn.
+	 */
 	public Identifier texture(String id) {
 		if (id == null || id.isEmpty()) {
 			return null;
 		}
 
-		Identifier ready = textures.get(id);
-		if (ready != null) {
-			return ready;
+		int index = isStrip(id) ? 0 : frameAt(id, System.currentTimeMillis());
+		Identifier chosen = textures.get(key(id, index));
+		if (chosen != null) {
+			return chosen;
 		}
 
 		Cape cape = find(id);
 		if (cape != null) {
 			download(cape);
 		}
-		return null;
+		return textures.get(key(id, 0));
 	}
 
 	public int textureWidth(String id) {
@@ -361,8 +395,11 @@ public final class HalcyonCosmetics {
 		return size == null ? 32 : size[1];
 	}
 
-	/** The height of a single frame, which is the whole picture when it is not animated. */
+	/** The height of one frame, which is the whole picture unless the frames share a strip. */
 	public int frameHeight(String id) {
+		if (!isStrip(id)) {
+			return textureHeight(id);
+		}
 		return Math.max(1, textureHeight(id) / frames(id));
 	}
 
@@ -418,6 +455,7 @@ public final class HalcyonCosmetics {
 						List<Cape> parsed = new ArrayList<>();
 						Map<String, String> parsedKinds = new LinkedHashMap<>();
 						Map<String, int[]> parsedAnimations = new LinkedHashMap<>();
+						Map<String, List<String>> parsedFrames = new LinkedHashMap<>();
 
 						for (JsonElement element : array) {
 							if (!element.isJsonObject()) {
@@ -441,12 +479,25 @@ public final class HalcyonCosmetics {
 							String kind = text(entry, "type");
 							parsedKinds.put(id, kind.isEmpty() ? "cape" : kind);
 
+							List<String> urls = strings(entry, "frameTextures");
+							parsedFrames.put(id, urls);
+
 							boolean animated = bool(entry, "animated");
-							int frames = number(entry, "frames", 1);
-							int frameMs = number(entry, "frameMs", 100);
+							int declared = number(entry, "frames", 1);
+							int count = urls.size() > 1
+									? urls.size()
+									: (animated ? Math.max(2, declared) : 1);
 							parsedAnimations.put(
-									id,
-									new int[] {animated ? Math.max(2, frames) : 1, Math.max(20, frameMs)});
+									id, new int[] {count, Math.max(20, number(entry, "frameMs", 100))});
+						}
+
+						// A cosmetic whose frames changed has to drop the pictures it cached, or the
+						// old animation would keep playing until the game restarts.
+						for (Map.Entry<String, List<String>> fresh : parsedFrames.entrySet()) {
+							List<String> previous = frameUrls.get(fresh.getKey());
+							if (previous != null && !previous.equals(fresh.getValue())) {
+								forget(fresh.getKey());
+							}
 						}
 
 						catalogue = List.copyOf(parsed);
@@ -454,6 +505,8 @@ public final class HalcyonCosmetics {
 						kinds.putAll(parsedKinds);
 						animations.keySet().retainAll(parsedAnimations.keySet());
 						animations.putAll(parsedAnimations);
+						frameUrls.keySet().retainAll(parsedFrames.keySet());
+						frameUrls.putAll(parsedFrames);
 						status = "";
 					} catch (RuntimeException parseError) {
 						HalcyonCompanion.LOGGER.debug("The Halcyon cosmetics list could not be parsed");
@@ -524,14 +577,31 @@ public final class HalcyonCosmetics {
 				});
 	}
 
+	/** Starts whatever pictures this cosmetic still needs. Safe to call on every frame. */
 	private void download(Cape cape) {
-		if (!pending.add(cape.id())) {
+		List<String> urls = frameUrls.getOrDefault(cape.id(), List.of());
+		List<String> wanted =
+				urls.isEmpty() ? List.of(cape.texture() == null ? "" : cape.texture()) : urls;
+
+		for (int index = 0; index < wanted.size(); index++) {
+			if (!textures.containsKey(key(cape.id(), index))) {
+				fetchFrame(cape.id(), index, wanted.get(index));
+			}
+		}
+	}
+
+	private void fetchFrame(String id, int index, String texture) {
+		String slot = key(id, index);
+		Long wait = retryAt.get(slot);
+		if (wait != null && System.currentTimeMillis() < wait) {
 			return;
 		}
 
-		String url = address(cape.texture());
+		String url = address(texture);
 		if (url == null) {
-			pending.remove(cape.id());
+			return;
+		}
+		if (!pending.add(slot)) {
 			return;
 		}
 
@@ -539,35 +609,53 @@ public final class HalcyonCosmetics {
 		http.sendAsync(get, HttpResponse.BodyHandlers.ofByteArray())
 				.whenComplete((response, error) -> {
 					if (error != null || response == null || response.statusCode() != 200) {
-						pending.remove(cape.id());
+						retryAt.put(slot, System.currentTimeMillis() + RETRY_MS);
+						pending.remove(slot);
 						return;
 					}
 
 					MinecraftClient client = MinecraftClient.getInstance();
 					if (client == null) {
-						pending.remove(cape.id());
+						pending.remove(slot);
 						return;
 					}
-					client.execute(() -> register(cape.id(), response.body()));
+					client.execute(() -> register(id, index, response.body()));
 				});
 	}
 
 	/** Textures have to be handed to the texture manager on the render thread. */
-	private void register(String id, byte[] bytes) {
+	private void register(String id, int index, byte[] bytes) {
+		String slot = key(id, index);
 		try {
 			NativeImage image = NativeImage.read(new ByteArrayInputStream(bytes));
-			Identifier identifier = Identifier.of("halcyon", "cosmetics/" + slug(id));
+			Identifier identifier =
+					Identifier.of("halcyon", "cosmetics/" + slug(id) + "_f" + index);
 			NativeImageBackedTexture texture =
 					new NativeImageBackedTexture(identifier::toString, image);
 
 			MinecraftClient.getInstance().getTextureManager().registerTexture(identifier, texture);
-			sizes.put(id, new int[] {image.getWidth(), image.getHeight()});
-			textures.put(id, identifier);
+			if (index == 0) {
+				sizes.put(id, new int[] {image.getWidth(), image.getHeight()});
+			}
+			textures.put(slot, identifier);
+			retryAt.remove(slot);
 		} catch (IOException | RuntimeException error) {
+			retryAt.put(slot, System.currentTimeMillis() + RETRY_MS);
 			HalcyonCompanion.LOGGER.warn("A Halcyon cosmetic picture could not be read", error);
 		} finally {
-			pending.remove(id);
+			pending.remove(slot);
 		}
+	}
+
+	/** Drops the cached pictures of one cosmetic so they are pulled again. */
+	private void forget(String id) {
+		textures.keySet().removeIf(entry -> entry.startsWith(id + "#"));
+		retryAt.keySet().removeIf(entry -> entry.startsWith(id + "#"));
+		sizes.remove(id);
+	}
+
+	private static String key(String id, int index) {
+		return id + "#" + index;
 	}
 
 	/** Turns a stored texture path into an absolute address. */
@@ -602,6 +690,24 @@ public final class HalcyonCosmetics {
 			return "";
 		}
 		return value.getAsString();
+	}
+
+	private static List<String> strings(JsonObject object, String key) {
+		JsonElement value = object.get(key);
+		if (value == null || !value.isJsonArray()) {
+			return List.of();
+		}
+
+		List<String> found = new ArrayList<>();
+		for (JsonElement element : value.getAsJsonArray()) {
+			if (element != null && element.isJsonPrimitive()) {
+				String entry = element.getAsString().trim();
+				if (!entry.isEmpty()) {
+					found.add(entry);
+				}
+			}
+		}
+		return List.copyOf(found);
 	}
 
 	private static boolean bool(JsonObject object, String key) {
