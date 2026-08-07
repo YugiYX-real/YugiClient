@@ -50,10 +50,51 @@
 						<span class="label">Cosmetics</span>
 					</div>
 					<div class="card stat">
-						<span class="value" id="s-worn">&mdash;</span>
-						<span class="label">Capes worn now</span>
+						<span class="value" id="s-version">&mdash;</span>
+						<span class="label">Published version</span>
 					</div>
 				</div>
+
+				<section class="section">
+					<div class="section-head">
+						<h2>Publish a version</h2>
+						<p>Upload the installers, then hand them to every launcher</p>
+					</div>
+					<div class="card">
+						<div id="release" class="empty">Nothing published yet.</div>
+						<div class="inline" style="margin-top: 0.9rem">
+							<div class="field">
+								<label for="u-version">Version</label>
+								<input id="u-version" placeholder="1.2.5" />
+							</div>
+							<div class="field">
+								<label for="u-notes">What changed</label>
+								<input id="u-notes" placeholder="Cosmetics, wings and a new main menu" />
+							</div>
+						</div>
+						<div class="field">
+							<label for="u-files">Installers</label>
+							<input id="u-files" type="file" multiple />
+							<div class="hint">
+								Pick the Windows setup, the AppImage and the dmg together if you have
+								them. The feed each one belongs in is worked out from its ending, and the
+								checksums are taken here on the server.
+							</div>
+						</div>
+						<div class="row">
+							<button class="button primary" id="publish-version">Upload and publish</button>
+							<span id="u-status" class="hint"></span>
+						</div>
+					</div>
+					<div class="card scroll" style="margin-top: 1rem">
+						<table>
+							<thead>
+								<tr><th>File</th><th>Size</th><th>Uploaded</th><th></th></tr>
+							</thead>
+							<tbody id="updates"></tbody>
+						</table>
+					</div>
+				</section>
 
 				<section class="section">
 					<div class="section-head"><h2>Announcements</h2><p>Shown in the launcher and on the front page</p></div>
@@ -67,7 +108,10 @@
 				</section>
 
 				<section class="section">
-					<div class="section-head"><h2>Create a cape</h2><p>Upload the sheet, then publish it</p></div>
+					<div class="section-head">
+						<h2>Create a cosmetic</h2>
+						<p>Capes, wings, hats and anything else, still or animated</p>
+					</div>
 					<div class="card">
 						<div class="inline">
 							<div class="field">
@@ -79,12 +123,28 @@
 								<input id="c-name" placeholder="Aurora" />
 							</div>
 							<div class="field">
+								<label for="c-type">Kind</label>
+								<select id="c-type">
+									<option value="cape">Cape</option>
+									<option value="wings">Wings</option>
+									<option value="backpack">Backpack</option>
+									<option value="hat">Hat</option>
+									<option value="halo">Halo</option>
+									<option value="mask">Mask</option>
+									<option value="shoulder">Shoulder buddy</option>
+									<option value="aura">Aura</option>
+									<option value="trail">Trail</option>
+								</select>
+							</div>
+							<div class="field">
 								<label for="c-rarity">Rarity</label>
 								<select id="c-rarity">
 									<option>common</option>
+									<option>uncommon</option>
 									<option>rare</option>
 									<option>epic</option>
 									<option>legendary</option>
+									<option>exclusive</option>
 								</select>
 							</div>
 						</div>
@@ -92,12 +152,33 @@
 							<label for="c-description">Description</label>
 							<input id="c-description" placeholder="Handed out to founders" />
 						</div>
-						<div class="field">
-							<label for="c-file">Cape sheet, 64x32 or 64x64 png</label>
-							<input id="c-file" type="file" accept="image/png" />
-							<div class="hint">Uploaded as the id with a png ending.</div>
+						<div class="inline">
+							<div class="field">
+								<label for="c-animated">Animated</label>
+								<select id="c-animated">
+									<option value="no">No, one still image</option>
+									<option value="yes">Yes, a strip of frames</option>
+								</select>
+							</div>
+							<div class="field">
+								<label for="c-frames">Frames</label>
+								<input id="c-frames" type="number" min="2" max="64" value="8" />
+							</div>
+							<div class="field">
+								<label for="c-frame-ms">Milliseconds per frame</label>
+								<input id="c-frame-ms" type="number" min="20" max="5000" value="100" />
+							</div>
 						</div>
-						<button class="button primary" id="publish">Publish cape</button>
+						<div class="field">
+							<label for="c-file">Texture, png</label>
+							<input id="c-file" type="file" accept="image/png" />
+							<div class="hint">
+								A cape is one 64x32 sheet. An animated one is every frame stacked into a
+								single tall image, so eight cape frames make a 64x256 png, played top to
+								bottom on a loop. The file is stored as the id with a png ending.
+							</div>
+						</div>
+						<button class="button primary" id="publish">Publish cosmetic</button>
 					</div>
 				</section>
 
@@ -180,6 +261,22 @@
 		<script>
 			let announcements = []
 
+			function bytes(value) {
+				const size = Number(value ?? 0)
+				if (size < 1024) {
+					return `${size} B`
+				}
+				if (size < 1024 * 1024) {
+					return `${(size / 1024).toFixed(1)} KB`
+				}
+				return `${(size / 1024 / 1024).toFixed(1)} MB`
+			}
+
+			/** File names travel in a url, so anything unusual becomes a dash. */
+			function safeName(name) {
+				return String(name).replace(/[^A-Za-z0-9._-]+/g, "-")
+			}
+
 			function paintAnnouncements() {
 				const host = document.getElementById("announcements")
 				if (announcements.length === 0) {
@@ -225,6 +322,46 @@
 				}))
 			}
 
+			function paintRelease(release, files) {
+				const host = document.getElementById("release")
+				if (release === null || release === undefined) {
+					host.className = "empty"
+					host.textContent =
+						"Nothing published yet, so every launcher is told there is no update."
+				} else {
+					host.className = ""
+					host.innerHTML =
+						`<strong>${Halcyon.escape(release.version)}</strong> ` +
+						`<span class="tag">published ${Halcyon.escape(Halcyon.when(release.publishedAt))}</span>` +
+						`<div class="hint" style="margin-top:0.4rem">${Halcyon.escape(release.notes ?? "")}</div>`
+				}
+
+				const rows = files ?? []
+				document.getElementById("updates").innerHTML =
+					rows.length === 0
+						? '<tr><td colspan="4">No installers uploaded.</td></tr>'
+						: rows
+								.map(
+									(file) =>
+										`<tr><td>${Halcyon.escape(file.name)}</td><td>${bytes(file.bytes)}</td><td>${Halcyon.escape(Halcyon.when(file.modifiedAt))}</td><td><button class="button small danger drop-file" data-file="${Halcyon.escape(file.name)}">Delete</button></td></tr>`,
+								)
+								.join("")
+
+				document.querySelectorAll(".drop-file").forEach((button) => {
+					button.addEventListener("click", async () => {
+						try {
+							await Halcyon.api(`/v1/updates/${button.dataset.file}`, {
+								method: "DELETE",
+							})
+							Halcyon.toast("file deleted")
+							load()
+						} catch (error) {
+							Halcyon.toast(error.message, true)
+						}
+					})
+				})
+			}
+
 			async function load() {
 				const user = await Halcyon.guard(true)
 				if (user === null) {
@@ -244,10 +381,26 @@
 				document.getElementById("s-cosmetics").textContent = Halcyon.number(
 					data.stats.cosmetics,
 				)
-				document.getElementById("s-worn").textContent = Halcyon.number(data.stats.capesWorn)
+				document.getElementById("s-version").textContent =
+					data.release === null || data.release === undefined ? "none" : data.release.version
+
+				paintRelease(data.release, data.updates)
 
 				announcements = Array.isArray(data.announcements) ? data.announcements : []
 				paintAnnouncements()
+
+				const types = data.types ?? {}
+				const typeSelect = document.getElementById("c-type")
+				if (Object.keys(types).length > 0) {
+					const chosen = typeSelect.value
+					typeSelect.innerHTML = Object.entries(types)
+						.map(
+							([id, entry]) =>
+								`<option value="${Halcyon.escape(id)}">${Halcyon.escape(entry.label ?? id)}</option>`,
+						)
+						.join("")
+					typeSelect.value = chosen
+				}
 
 				const cosmetics = data.cosmetics ?? []
 				document.getElementById("cosmetics").innerHTML =
@@ -283,7 +436,7 @@
 				document.getElementById("g-id").innerHTML = cosmetics
 					.map(
 						(cosmetic) =>
-							`<option value="${Halcyon.escape(cosmetic.id)}">${Halcyon.escape(cosmetic.name ?? cosmetic.id)}</option>`,
+							`<option value="${Halcyon.escape(cosmetic.id)}">${Halcyon.escape(cosmetic.name ?? cosmetic.id)} &middot; ${Halcyon.escape(cosmetic.type ?? "cape")}</option>`,
 					)
 					.join("")
 
@@ -291,10 +444,13 @@
 					(data.grants ?? []).length === 0
 						? '<tr><td colspan="3">Nothing handed out yet.</td></tr>'
 						: data.grants
-								.map(
-									(grant) =>
-										`<tr><td>${Halcyon.escape(grant.name)}</td><td>${Halcyon.escape(grant.owned.join(", "))}</td><td>${Halcyon.escape(grant.equipped ?? "nothing")}</td></tr>`,
-								)
+								.map((grant) => {
+									const worn = Object.entries(grant.equipped ?? {})
+										.filter(([, id]) => id !== null && id !== undefined)
+										.map(([slot, id]) => `${slot}: ${id}`)
+										.join(", ")
+									return `<tr><td>${Halcyon.escape(grant.name)}</td><td>${Halcyon.escape(grant.owned.join(", "))}</td><td>${Halcyon.escape(worn === "" ? "nothing" : worn)}</td></tr>`
+								})
 								.join("")
 
 				document.getElementById("accounts").innerHTML = (data.accounts ?? [])
@@ -305,10 +461,16 @@
 								: '<span class="tag">member</span>'
 						const next = account.role === "admin" ? "member" : "admin"
 						const name = Halcyon.escape(account.username)
+						const linked =
+							account.minecraft === ""
+								? "not linked"
+								: account.verified === true
+									? `${account.minecraft} (verified)`
+									: account.minecraft
 						return `<tr>
 							<td>${name}</td>
 							<td>${Halcyon.escape(account.email)}</td>
-							<td>${Halcyon.escape(account.minecraft === "" ? "not linked" : account.minecraft)}</td>
+							<td>${Halcyon.escape(linked)}</td>
 							<td>${role}</td>
 							<td>${Halcyon.escape(Halcyon.when(account.createdAt))}</td>
 							<td>
@@ -382,6 +544,67 @@
 				}
 			})
 
+			/**
+			 * Uploads every chosen installer and then publishes them as one version. Uploading is the
+			 * slow part, so the button reports which file it is on rather than sitting silent.
+			 */
+			document.getElementById("publish-version").addEventListener("click", async () => {
+				const button = document.getElementById("publish-version")
+				const status = document.getElementById("u-status")
+				const version = document.getElementById("u-version").value.trim().replace(/^v/i, "")
+				const chosen = Array.from(document.getElementById("u-files").files)
+
+				if (!/^[0-9]+\.[0-9]+\.[0-9]+/.test(version)) {
+					Halcyon.toast("a version like 1.2.5 is required", true)
+					return
+				}
+
+				button.disabled = true
+				try {
+					const names = []
+					for (const file of chosen) {
+						const name = safeName(file.name)
+						status.textContent = `Uploading ${name}, ${bytes(file.size)}`
+						await Halcyon.api(`/v1/updates/${name}`, {
+							method: "PUT",
+							body: file,
+							raw: true,
+						})
+						names.push(name)
+					}
+
+					if (names.length === 0) {
+						// Publishing without uploading is how a version is re-pointed at files that
+						// are already on the server.
+						const listing = await Halcyon.api("/v1/updates")
+						for (const file of listing.files ?? []) {
+							if (!file.name.endsWith(".yml")) {
+								names.push(file.name)
+							}
+						}
+					}
+
+					status.textContent = "Working out checksums"
+					const result = await Halcyon.api("/v1/updates/publish", {
+						method: "POST",
+						body: {
+							version,
+							notes: document.getElementById("u-notes").value,
+							files: names,
+						},
+					})
+
+					status.textContent = ""
+					Halcyon.toast(`${result.release.version} published`)
+					load()
+				} catch (error) {
+					status.textContent = ""
+					Halcyon.toast(error.message, true)
+				} finally {
+					button.disabled = false
+				}
+			})
+
 			document.getElementById("publish").addEventListener("click", async () => {
 				const id = document.getElementById("c-id").value.trim().toLowerCase()
 				if (id === "") {
@@ -390,6 +613,7 @@
 				}
 
 				const file = document.getElementById("c-file").files[0]
+				const animated = document.getElementById("c-animated").value === "yes"
 				try {
 					if (file !== undefined) {
 						await Halcyon.api(`/v1/cosmetics/textures/${id}.png`, {
@@ -404,8 +628,12 @@
 						body: {
 							id,
 							name: document.getElementById("c-name").value || id,
+							type: document.getElementById("c-type").value,
 							rarity: document.getElementById("c-rarity").value,
 							description: document.getElementById("c-description").value,
+							animated,
+							frames: Number(document.getElementById("c-frames").value),
+							frameMs: Number(document.getElementById("c-frame-ms").value),
 						},
 					})
 					Halcyon.toast(`${id} published`)
