@@ -4,15 +4,16 @@ import { mkdir, readdir, rename, stat, unlink } from "node:fs/promises"
 import { dirname, extname, join, resolve } from "node:path"
 import { pipeline } from "node:stream/promises"
 
-import { Store } from "./store.mjs"
+import { Store, normaliseCosmeticId } from "./store.mjs"
 
 const PORT = Number.parseInt(process.env.PORT ?? "8787", 10)
 const HOST = process.env.HOST ?? "127.0.0.1"
 const DATA_FILE = resolve(process.env.DATA_FILE ?? "./data/state.json")
 
-// Installers live beside the state file unless told otherwise, so the folder is
-// always one the service account already owns.
+// Installers and cosmetic textures live beside the state file unless told otherwise, so the
+// folders are always ones the service account already owns.
 const UPDATE_DIR = resolve(process.env.UPDATE_DIR ?? join(dirname(DATA_FILE), "updates"))
+const COSMETIC_DIR = resolve(process.env.COSMETIC_DIR ?? join(dirname(DATA_FILE), "cosmetics"))
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? ""
 const CLIENT_KEY = process.env.CLIENT_KEY ?? ""
 const PRESENCE_TTL_MS = Number.parseInt(process.env.PRESENCE_TTL_SECONDS ?? "300", 10) * 1000
@@ -23,11 +24,16 @@ const RATE_LIMIT_WINDOW_MS = 60 * 1000
 const RATE_LIMIT_MAX = 120
 
 const UPDATE_PREFIX = "/v1/updates"
+const COSMETIC_PREFIX = "/v1/cosmetics"
+const COSMETIC_TEXTURE_PREFIX = `${COSMETIC_PREFIX}/textures`
+const COSMETIC_PLAYER_PREFIX = `${COSMETIC_PREFIX}/player`
 const SAFE_FILE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
+const PLAYER_NAME = /^[A-Za-z0-9_]{1,32}$/
 const CONTENT_TYPES = {
 	".yml": "text/yaml; charset=utf-8",
 	".yaml": "text/yaml; charset=utf-8",
 	".json": "application/json; charset=utf-8",
+	".png": "image/png",
 	".zip": "application/zip",
 	".gz": "application/gzip"
 }
@@ -88,6 +94,16 @@ function readBody(request) {
 	})
 }
 
+/** Reads a json body, returning null when it cannot be parsed. */
+async function readJson(request) {
+	const raw = await readBody(request)
+	try {
+		return JSON.parse(raw === "" ? "{}" : raw)
+	} catch {
+		return null
+	}
+}
+
 function clientAllowed(request) {
 	if (CLIENT_KEY === "") {
 		return true
@@ -102,14 +118,14 @@ function adminAllowed(request) {
 	return request.headers.authorization === `Bearer ${ADMIN_TOKEN}`
 }
 
-/** The installer file a request points at, or null when the path is not one. */
-function updateFileName(path) {
-	if (!path.startsWith(`${UPDATE_PREFIX}/`)) {
+/** The file a request points at below a prefix, or null when the path is not one. */
+function fileNameFrom(path, prefix) {
+	if (!path.startsWith(`${prefix}/`)) {
 		return null
 	}
 	let name = ""
 	try {
-		name = decodeURIComponent(path.slice(UPDATE_PREFIX.length + 1))
+		name = decodeURIComponent(path.slice(prefix.length + 1))
 	} catch {
 		return null
 	}
@@ -144,10 +160,10 @@ function parseRange(header, size) {
 	return { start, end }
 }
 
-async function listUpdates() {
+async function listFiles(directory) {
 	let entries = []
 	try {
-		entries = await readdir(UPDATE_DIR)
+		entries = await readdir(directory)
 	} catch {
 		return []
 	}
@@ -157,7 +173,7 @@ async function listUpdates() {
 		if (entry.endsWith(".part")) {
 			continue
 		}
-		const info = await stat(join(UPDATE_DIR, entry))
+		const info = await stat(join(directory, entry))
 		if (info.isFile()) {
 			files.push({
 				name: entry,
@@ -169,17 +185,17 @@ async function listUpdates() {
 	return files.sort((left, right) => left.name.localeCompare(right.name))
 }
 
-async function serveUpdate(request, response, name) {
-	const file = join(UPDATE_DIR, name)
+async function serveFile(request, response, directory, name) {
+	const file = join(directory, name)
 	let info = null
 	try {
 		info = await stat(file)
 	} catch {
-		send(response, 404, { error: "that update file is not on the server" })
+		send(response, 404, { error: "that file is not on the server" })
 		return
 	}
 	if (!info.isFile()) {
-		send(response, 404, { error: "that update file is not on the server" })
+		send(response, 404, { error: "that file is not on the server" })
 		return
 	}
 
@@ -212,14 +228,14 @@ async function serveUpdate(request, response, name) {
 	await pipeline(createReadStream(file, { start: range.start, end: range.end }), response)
 }
 
-async function receiveUpdate(request, response, name) {
+async function receiveFile(request, response, directory, name) {
 	if (!adminAllowed(request)) {
 		send(response, 401, { error: "an admin token is required" })
 		return
 	}
 
-	await mkdir(UPDATE_DIR, { recursive: true })
-	const target = join(UPDATE_DIR, name)
+	await mkdir(directory, { recursive: true })
+	const target = join(directory, name)
 	const partial = `${target}.part`
 
 	try {
@@ -231,23 +247,205 @@ async function receiveUpdate(request, response, name) {
 	}
 
 	const info = await stat(target)
-	console.log(`[halcyon] stored update ${name} (${info.size} bytes)`)
+	console.log(`[halcyon] stored ${name} (${info.size} bytes)`)
 	send(response, 200, { file: name, bytes: info.size })
 }
 
-async function removeUpdate(request, response, name) {
+async function removeFile(request, response, directory, name) {
 	if (!adminAllowed(request)) {
 		send(response, 401, { error: "an admin token is required" })
 		return
 	}
 
 	try {
-		await unlink(join(UPDATE_DIR, name))
+		await unlink(join(directory, name))
 	} catch {
-		send(response, 404, { error: "that update file is not on the server" })
+		send(response, 404, { error: "that file is not on the server" })
 		return
 	}
 	send(response, 200, { removed: name })
+}
+
+/** Handles every file verb below a prefix. Returns false when the path is not a file path. */
+async function handleFiles(request, response, path, prefix, directory) {
+	if (path === prefix && (request.method === "GET" || request.method === "HEAD")) {
+		send(response, 200, { files: await listFiles(directory) })
+		return true
+	}
+
+	const name = fileNameFrom(path, prefix)
+	if (name === null) {
+		return false
+	}
+
+	if (request.method === "GET" || request.method === "HEAD") {
+		await serveFile(request, response, directory, name)
+		return true
+	}
+	if (request.method === "PUT") {
+		await receiveFile(request, response, directory, name)
+		return true
+	}
+	if (request.method === "DELETE") {
+		await removeFile(request, response, directory, name)
+		return true
+	}
+
+	send(response, 405, { error: "that method is not allowed for files" })
+	return true
+}
+
+function validName(value) {
+	const name = typeof value === "string" ? value.trim() : ""
+	return PLAYER_NAME.test(name) ? name : ""
+}
+
+async function handleCosmetics(request, response, path) {
+	const route = `${request.method} ${path}`
+
+	if (route === `GET ${COSMETIC_PREFIX}`) {
+		send(response, 200, { cosmetics: store.cosmetics() })
+		return true
+	}
+
+	if (route === `PUT ${COSMETIC_PREFIX}`) {
+		if (!adminAllowed(request)) {
+			send(response, 401, { error: "an admin token is required" })
+			return true
+		}
+
+		const payload = await readJson(request)
+		if (payload === null) {
+			send(response, 400, { error: "the body is not valid json" })
+			return true
+		}
+
+		const entries = Array.isArray(payload)
+			? payload
+			: Array.isArray(payload.cosmetics)
+				? payload.cosmetics
+				: [payload]
+		const saved = []
+		for (const entry of entries) {
+			const record = store.upsertCosmetic(entry ?? {})
+			if (record !== null) {
+				saved.push(record)
+			}
+		}
+
+		if (saved.length === 0) {
+			send(response, 400, { error: "every cosmetic needs a short lowercase id" })
+			return true
+		}
+		send(response, 200, { cosmetics: saved })
+		return true
+	}
+
+	if (route === `GET ${COSMETIC_PREFIX}/worn`) {
+		send(response, 200, { players: store.wornCapes() })
+		return true
+	}
+
+	if (route === `POST ${COSMETIC_PREFIX}/equip`) {
+		if (!clientAllowed(request)) {
+			send(response, 401, { error: "the client key is missing or wrong" })
+			return true
+		}
+
+		const payload = await readJson(request)
+		if (payload === null) {
+			send(response, 400, { error: "the body is not valid json" })
+			return true
+		}
+
+		const name = validName(payload.name)
+		if (name === "") {
+			send(response, 400, { error: "a player name is required" })
+			return true
+		}
+
+		const wanted =
+			payload.id === null || payload.id === undefined || payload.id === ""
+				? null
+				: normaliseCosmeticId(payload.id)
+		const profile = store.equip(name, wanted)
+		if (profile === null) {
+			send(response, 409, { error: "that cosmetic was never given to this player" })
+			return true
+		}
+		send(response, 200, profile)
+		return true
+	}
+
+	if (route === `POST ${COSMETIC_PREFIX}/grant` || route === `POST ${COSMETIC_PREFIX}/revoke`) {
+		if (!adminAllowed(request)) {
+			send(response, 401, { error: "an admin token is required" })
+			return true
+		}
+
+		const payload = await readJson(request)
+		if (payload === null) {
+			send(response, 400, { error: "the body is not valid json" })
+			return true
+		}
+
+		const name = validName(payload.name)
+		if (name === "") {
+			send(response, 400, { error: "a player name is required" })
+			return true
+		}
+
+		const id = normaliseCosmeticId(payload.id)
+		if (id === "" || store.cosmetic(id) === null) {
+			send(response, 404, { error: "that cosmetic does not exist" })
+			return true
+		}
+
+		const granting = path.endsWith("/grant")
+		send(response, 200, granting ? store.grant(name, id) : store.revoke(name, id))
+		return true
+	}
+
+	if (
+		path.startsWith(`${COSMETIC_PLAYER_PREFIX}/`) &&
+		(request.method === "GET" || request.method === "HEAD")
+	) {
+		let raw = ""
+		try {
+			raw = decodeURIComponent(path.slice(COSMETIC_PLAYER_PREFIX.length + 1))
+		} catch {
+			raw = ""
+		}
+
+		const name = validName(raw)
+		if (name === "") {
+			send(response, 400, { error: "a player name is required" })
+			return true
+		}
+		send(response, 200, store.profile(name))
+		return true
+	}
+
+	if (await handleFiles(request, response, path, COSMETIC_TEXTURE_PREFIX, COSMETIC_DIR)) {
+		return true
+	}
+
+	if (request.method === "DELETE" && path.startsWith(`${COSMETIC_PREFIX}/`)) {
+		if (!adminAllowed(request)) {
+			send(response, 401, { error: "an admin token is required" })
+			return true
+		}
+
+		const id = normaliseCosmeticId(path.slice(COSMETIC_PREFIX.length + 1))
+		if (id === "" || !store.removeCosmetic(id)) {
+			send(response, 404, { error: "that cosmetic does not exist" })
+			return true
+		}
+		send(response, 200, { removed: id })
+		return true
+	}
+
+	return false
 }
 
 async function handle(request, response, path) {
@@ -288,11 +486,8 @@ async function handle(request, response, path) {
 			return
 		}
 
-		const raw = await readBody(request)
-		let payload = null
-		try {
-			payload = JSON.parse(raw === "" ? "{}" : raw)
-		} catch {
+		const payload = await readJson(request)
+		if (payload === null) {
 			send(response, 400, { error: "the body is not valid json" })
 			return
 		}
@@ -322,12 +517,12 @@ async function handle(request, response, path) {
 			return
 		}
 
-		const raw = await readBody(request)
-		try {
-			send(response, 200, store.updateBranding(JSON.parse(raw)))
-		} catch {
+		const payload = await readJson(request)
+		if (payload === null) {
 			send(response, 400, { error: "the body is not valid json" })
+			return
 		}
+		send(response, 200, store.updateBranding(payload))
 		return
 	}
 
@@ -342,44 +537,34 @@ async function handle(request, response, path) {
 			return
 		}
 
-		const raw = await readBody(request)
-		try {
-			const parsed = JSON.parse(raw)
-			const entries = Array.isArray(parsed) ? parsed : parsed.announcements
-			if (!Array.isArray(entries)) {
-				send(response, 400, { error: "an array of announcements is required" })
-				return
-			}
-			send(response, 200, { announcements: store.updateAnnouncements(entries) })
-		} catch {
+		const payload = await readJson(request)
+		if (payload === null) {
 			send(response, 400, { error: "the body is not valid json" })
+			return
 		}
+
+		const entries = Array.isArray(payload) ? payload : payload.announcements
+		if (!Array.isArray(entries)) {
+			send(response, 400, { error: "an array of announcements is required" })
+			return
+		}
+		send(response, 200, { announcements: store.updateAnnouncements(entries) })
 		return
 	}
 
 	if (path === UPDATE_PREFIX && (request.method === "GET" || request.method === "HEAD")) {
 		send(response, 200, {
 			feed: `${UPDATE_PREFIX}/latest.yml`,
-			files: await listUpdates()
+			files: await listFiles(UPDATE_DIR)
 		})
 		return
 	}
 
-	const updateFile = updateFileName(path)
-	if (updateFile !== null) {
-		if (request.method === "GET" || request.method === "HEAD") {
-			await serveUpdate(request, response, updateFile)
-			return
-		}
-		if (request.method === "PUT") {
-			await receiveUpdate(request, response, updateFile)
-			return
-		}
-		if (request.method === "DELETE") {
-			await removeUpdate(request, response, updateFile)
-			return
-		}
-		send(response, 405, { error: "that method is not allowed for update files" })
+	if (await handleFiles(request, response, path, UPDATE_PREFIX, UPDATE_DIR)) {
+		return
+	}
+
+	if (await handleCosmetics(request, response, path)) {
 		return
 	}
 
@@ -390,11 +575,11 @@ const server = createServer((request, response) => {
 	const address = request.socket.remoteAddress ?? "unknown"
 	const path = pathOf(request)
 
-	// Downloading an installer is a handful of large requests from one machine,
-	// so the counter that protects the small json endpoints does not apply.
+	// Downloading an installer or a cape is a handful of large requests from one machine, so the
+	// counter that protects the small json endpoints does not apply.
 	const downloading =
 		(request.method === "GET" || request.method === "HEAD") &&
-		path.startsWith(`${UPDATE_PREFIX}/`)
+		(path.startsWith(`${UPDATE_PREFIX}/`) || path.startsWith(`${COSMETIC_TEXTURE_PREFIX}/`))
 
 	if (!downloading && rateLimited(address)) {
 		send(response, 429, { error: "too many requests" })
@@ -425,15 +610,18 @@ for (const signal of ["SIGINT", "SIGTERM"]) {
 	})
 }
 
-await mkdir(UPDATE_DIR, { recursive: true }).catch((error) => {
-	console.warn(`[halcyon] the update folder could not be created: ${error.message}`)
-})
+for (const directory of [UPDATE_DIR, COSMETIC_DIR]) {
+	await mkdir(directory, { recursive: true }).catch((error) => {
+		console.warn(`[halcyon] ${directory} could not be created: ${error.message}`)
+	})
+}
 
 server.listen(PORT, HOST, () => {
 	console.log(`[halcyon] backend listening on ${HOST} port ${PORT}`)
 	console.log(`[halcyon] state file ${DATA_FILE}`)
 	console.log(`[halcyon] update folder ${UPDATE_DIR}`)
+	console.log(`[halcyon] cosmetic folder ${COSMETIC_DIR}`)
 	if (ADMIN_TOKEN === "") {
-		console.warn("[halcyon] no admin token is set, branding and update uploads are disabled")
+		console.warn("[halcyon] no admin token is set, branding, cosmetics and uploads are disabled")
 	}
 })
