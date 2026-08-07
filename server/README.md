@@ -39,9 +39,38 @@ curl http://127.0.0.1:8787/v1/health
 sudo journalctl -u halcyon-backend -f
 ```
 
+## It runs on its own
+
+The backend is a systemd service, not a process attached to your shell. It starts at boot, it is
+restarted within three seconds if it ever crashes, and closing the ssh or PuTTY session does not
+touch it. Nothing needs to stay open.
+
+```bash
+systemctl status halcyon-backend    # is it running
+systemctl restart halcyon-backend   # after editing the env file
+systemctl disable --now halcyon-backend  # stop it for good
+```
+
+## Serve it on the plain ip
+
+The installer binds to loopback, so the address of the machine does not answer yet. One command
+changes that:
+
+```bash
+sudo bash server/deploy/expose.sh
+```
+
+It rebinds the service to every interface, generates a client key if there is none, opens the port
+in ufw when ufw is active, restarts the unit and prints the exact two lines to paste into the game
+config. If the vps sits behind a provider firewall, allow tcp 8787 there as well.
+
+This is plain http, so the client key travels unencrypted and anyone who watches the traffic can
+read it. For a cosmetic roster that is an acceptable trade. Point a domain at the machine and use
+the nginx setup below once you care.
+
 ## Expose it over https
 
-The service binds to loopback on purpose. Put nginx in front of it so the traffic is encrypted:
+Put nginx in front of the loopback service so the traffic is encrypted:
 
 ```bash
 sudo apt install nginx certbot python3-certbot-nginx
@@ -53,13 +82,17 @@ sudo certbot --nginx -d your.domain
 sudo ufw allow "Nginx Full"
 ```
 
+With nginx in front, set `HOST=127.0.0.1` again in `/etc/halcyon-backend.env` and close the direct
+port: `sudo ufw delete allow 8787/tcp`.
+
 ## Point the game at it
 
 Edit `config/halcyon-companion.json` inside the instance:
 
 ```json
 {
-	"backendUrl": "https://your.domain",
+	"backendUrl": "http://85.215.223.254:8787",
+	"backendKey": "the client key printed by expose.sh",
 	"badgeAllPlayers": false
 }
 ```
