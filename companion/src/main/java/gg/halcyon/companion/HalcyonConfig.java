@@ -22,7 +22,7 @@ public final class HalcyonConfig {
 	 * Badge every player instead of only roster members.
 	 *
 	 * <p>Useful while no roster endpoint is configured, because you never see your own nameplate and
-	 * would otherwise never see the badge at all.
+	 * would otherwise only see your own badge in the player list.
 	 */
 	public boolean badgeAllPlayers = false;
 
@@ -37,6 +37,9 @@ public final class HalcyonConfig {
 
 	/** Replace the vanilla resource reload screen with the Halcyon one. */
 	public boolean splashEnabled = true;
+
+	/** Draw the Halcyon header across the top of the main menu. */
+	public boolean mainMenuBranding = true;
 
 	/** Master switch for the on screen overlay. */
 	public boolean hudEnabled = true;

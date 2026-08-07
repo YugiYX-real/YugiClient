@@ -2,7 +2,12 @@
   "required": true,
   "package": "gg.halcyon.companion.mixin",
   "compatibilityLevel": "JAVA_21",
-  "client": ["EntityRendererMixin", "SplashOverlayMixin"],
+  "client": [
+    "EntityRendererMixin",
+    "PlayerListHudMixin",
+    "SplashOverlayMixin",
+    "TitleScreenMixin"
+  ],
   "injectors": {
     "defaultRequire": 0
   }
