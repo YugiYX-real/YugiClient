@@ -1,5 +1,5 @@
 {
-  "tag": "v1.2.0",
-  "requestedAt": "2026-08-07T01:42:00Z",
-  "summary": "The Halcyon companion mod now ships inside the installer and is installed into every Fabric 1.21.x instance on launch, including instances that already exist, together with Fabric API. Also carries the square instance artwork, dashboard artwork for recently played instances and the wrapping toolbars and tab strips"
+  "tag": "v1.2.1",
+  "requestedAt": "2026-08-07T01:58:00Z",
+  "summary": "Supersedes v1.2.0. The companion mod is now only installed into the Fabric versions it was compiled for and is removed again when an instance moves to another version, so it can never crash a launch. Minecraft crash reports are read back into the instance log and the toast, instead of only leaving a file path behind."
 }
