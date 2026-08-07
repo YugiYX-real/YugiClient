@@ -1,11 +1,12 @@
 import { createServer } from "node:http"
 import { createReadStream, createWriteStream } from "node:fs"
-import { mkdir, readdir, rename, stat, unlink, writeFile } from "node:fs/promises"
+import { mkdir, readdir, rename, stat, unlink } from "node:fs/promises"
 import { dirname, extname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { pipeline } from "node:stream/promises"
 
 import { COSMETIC_SLOTS, COSMETIC_TYPES, Store, normaliseCosmeticId } from "./store.mjs"
+import { collectFiles, normaliseVersion, writeFeeds } from "./updates.mjs"
 import { Accounts } from "./accounts.mjs"
 import { minecraftProfile } from "./minecraft.mjs"
 import { serveSite } from "./site.mjs"
@@ -47,8 +48,6 @@ const SESSION_COOKIE = "halcyon_session"
 
 const SAFE_FILE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
 const PLAYER_NAME = /^[A-Za-z0-9_]{1,32}$/
-const VERSION = /^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/
-const BASE64 = /^[A-Za-z0-9+/=]{16,256}$/
 const CONTENT_TYPES = {
 	".yml": "text/yaml; charset=utf-8",
 	".yaml": "text/yaml; charset=utf-8",
@@ -380,60 +379,6 @@ async function handleFiles(request, response, path, prefix, directory) {
 function validName(value) {
 	const name = typeof value === "string" ? value.trim() : ""
 	return PLAYER_NAME.test(name) ? name : ""
-}
-
-/**
- * Which update feed an installer belongs in. The launcher asks for one of these three names
- * depending on the machine it runs on, so a Windows installer must not end up in the Linux feed.
- */
-function feedFor(name) {
-	const lower = name.toLowerCase()
-	if (lower.endsWith(".dmg") || (lower.endsWith(".zip") && lower.includes("mac"))) {
-		return "latest-mac.yml"
-	}
-	if (
-		lower.endsWith(".appimage") ||
-		lower.endsWith(".deb") ||
-		lower.endsWith(".rpm") ||
-		lower.endsWith(".tar.gz")
-	) {
-		return "latest-linux.yml"
-	}
-	return "latest.yml"
-}
-
-/**
- * Writes the little yaml files the launcher polls.
- *
- * The panel uploads the installer and works out its sha512 in the browser, so all that is left
- * here is describing what was uploaded in the shape the updater expects.
- */
-async function writeFeeds(version, files, releaseDate) {
-	const grouped = new Map()
-	for (const file of files) {
-		const feed = feedFor(file.name)
-		grouped.set(feed, [...(grouped.get(feed) ?? []), file])
-	}
-
-	await mkdir(UPDATE_DIR, { recursive: true })
-	const written = []
-
-	for (const [feed, entries] of grouped) {
-		const first = entries[0]
-		const lines = [`version: ${version}`, "files:"]
-		for (const entry of entries) {
-			lines.push(`  - url: ${entry.name}`)
-			lines.push(`    sha512: ${entry.sha512}`)
-			lines.push(`    size: ${entry.size}`)
-		}
-		lines.push(`path: ${first.name}`)
-		lines.push(`sha512: ${first.sha512}`)
-		lines.push(`releaseDate: '${releaseDate}'`)
-		await writeFile(join(UPDATE_DIR, feed), `${lines.join("\n")}\n`, "utf8")
-		written.push(feed)
-	}
-
-	return written
 }
 
 /** The numbers the website shows. Cheap enough to compute on every request. */
@@ -791,11 +736,8 @@ async function handleUpdates(request, response, path) {
 	}
 
 	/**
-	 * Publishes a version.
-	 *
-	 * The installers themselves are uploaded first, one PUT each, and this call is what makes them
-	 * the version every launcher will offer. Checksums are worked out by whoever uploaded the file
-	 * rather than here, so publishing costs the server nothing even for a large installer.
+	 * Publishes a version. The installers are uploaded first, one PUT each, and this call is what
+	 * makes them the version every launcher is offered.
 	 */
 	if (route === `POST ${UPDATE_PREFIX}/publish`) {
 		if (!requireAdmin(request, response)) {
@@ -808,49 +750,26 @@ async function handleUpdates(request, response, path) {
 			return true
 		}
 
-		const version = String(payload.version ?? "")
-			.trim()
-			.replace(/^v/, "")
-		if (!VERSION.test(version)) {
+		const version = normaliseVersion(payload.version)
+		if (version === "") {
 			send(response, 400, { error: "a version like 1.2.5 is required" })
 			return true
 		}
 
 		const wanted = Array.isArray(payload.files) ? payload.files : []
-		const files = []
-		for (const entry of wanted) {
-			const name = typeof entry?.name === "string" ? entry.name.trim() : ""
-			const sha512 = typeof entry?.sha512 === "string" ? entry.sha512.trim() : ""
-			const size = Number(entry?.size)
-			if (!SAFE_FILE_NAME.test(name) || !BASE64.test(sha512) || !Number.isFinite(size)) {
-				send(response, 400, { error: `${name} is missing a name, checksum or size` })
-				return true
-			}
-
-			try {
-				const info = await stat(join(UPDATE_DIR, name))
-				if (info.size !== Math.round(size)) {
-					send(response, 409, {
-						error: `${name} on the server is a different size, upload it again`,
-					})
-					return true
-				}
-			} catch {
-				send(response, 404, { error: `${name} has not been uploaded yet` })
-				return true
-			}
-
-			files.push({ name, sha512, size: Math.round(size) })
-		}
-
-		if (files.length === 0) {
-			send(response, 400, { error: "at least one installer is required" })
+		const collected = await collectFiles(UPDATE_DIR, wanted)
+		if (collected.error !== undefined) {
+			send(response, 400, { error: collected.error })
 			return true
 		}
 
 		const releaseDate = new Date().toISOString()
-		const feeds = await writeFeeds(version, files, releaseDate)
-		const release = store.publishRelease({ version, notes: payload.notes, files })
+		const feeds = await writeFeeds(UPDATE_DIR, version, collected.files, releaseDate)
+		const release = store.publishRelease({
+			version,
+			notes: payload.notes,
+			files: collected.files,
+		})
 		console.log(`[halcyon] published ${version} across ${feeds.join(", ")}`)
 		send(response, 200, { release, feeds })
 		return true

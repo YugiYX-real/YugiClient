@@ -12,13 +12,17 @@ type RemoteCosmetic = {
 	readonly description?: unknown
 	readonly rarity?: unknown
 	readonly texture?: unknown
+	readonly type?: unknown
+	readonly slot?: unknown
+	readonly animated?: unknown
 }
 
 type CosmeticListPayload = { readonly cosmetics?: unknown }
 
 type PlayerPayload = {
 	readonly owned?: unknown
-	readonly equipped?: { readonly cape?: unknown } | null
+	readonly equipped?: Record<string, unknown> | null
+	readonly cape?: unknown
 	readonly cosmetics?: unknown
 }
 
@@ -57,11 +61,11 @@ function records(value: unknown): readonly RemoteCosmetic[] {
 /**
  * The launcher side of the cosmetics service.
  *
- * Two things make this more than a thin http wrapper. Capes are fetched here and handed to the
+ * Two things make this more than a thin http wrapper. Textures are fetched here and handed to the
  * renderer as data urls, because the window only loads images from itself, data and https, and the
- * backend still answers on plain http. And a session is obtained by proving who the player is with
- * the Minecraft token the launcher already holds, so nobody has to type a name that could be
- * anybody's.
+ * backend still answers on plain http. And who the player is never comes from the body of a
+ * request: the Minecraft token the launcher already holds is sent instead, and the server asks
+ * Mojang. That works on a fresh install, where there is no website account to sign in to yet.
  */
 export class CosmeticsService {
 	private readonly auth: AuthService
@@ -113,7 +117,7 @@ export class CosmeticsService {
 		}
 	}
 
-	/** Fetches a cape once and keeps it as a data url the window is allowed to draw. */
+	/** Fetches a texture once and keeps it as a data url the window is allowed to draw. */
 	private async texture(path: string): Promise<string> {
 		const cached = this.textures.get(path)
 		if (cached !== undefined) {
@@ -132,7 +136,7 @@ export class CosmeticsService {
 			this.textures.set(path, inlined)
 			return inlined
 		} catch (error) {
-			this.logger.debug(`The cape ${path} could not be downloaded`, error)
+			this.logger.debug(`The texture ${path} could not be downloaded`, error)
 			return ""
 		}
 	}
@@ -171,6 +175,18 @@ export class CosmeticsService {
 		}
 	}
 
+	/** What the player is wearing, across the old cape only shape and the newer slots. */
+	private static wearing(payload: PlayerPayload | null): string | null {
+		const slots = payload?.equipped ?? {}
+		for (const value of Object.values(slots)) {
+			if (typeof value === "string" && value !== "") {
+				return value
+			}
+		}
+		const legacy = text(payload?.cape)
+		return legacy === "" ? null : legacy
+	}
+
 	/** Everything the wardrobe page shows: the catalogue, what is owned and what is worn. */
 	async load(): Promise<CosmeticWardrobe> {
 		const account = await this.auth.selected()
@@ -191,7 +207,7 @@ export class CosmeticsService {
 			{ method: "GET" },
 		)
 		const owned = new Set(stringList(mine.data?.owned))
-		const equipped = text(mine.data?.equipped?.cape) === "" ? null : text(mine.data?.equipped?.cape)
+		const equipped = CosmeticsService.wearing(mine.data)
 		const cosmetics = await this.decorate(records(catalogue.data?.cosmetics), owned)
 		const ownedCount = cosmetics.filter((entry) => entry.owned).length
 
@@ -201,10 +217,7 @@ export class CosmeticsService {
 			signedIn: this.session !== null,
 			equipped,
 			cosmetics,
-			message:
-				ownedCount === 0
-					? "No cosmetics have been given to this account yet."
-					: "",
+			message: ownedCount === 0 ? "No cosmetics have been given to this account yet." : "",
 		}
 	}
 
@@ -230,6 +243,9 @@ export class CosmeticsService {
 
 		const token = text(result.data?.token)
 		if (!result.ok || token === "") {
+			this.logger.warn(
+				`The backend refused the Minecraft sign in with ${result.status} ${result.error}`,
+			)
 			return null
 		}
 
@@ -249,37 +265,50 @@ export class CosmeticsService {
 		const session = await this.ensureSession(account)
 		if (session === null) {
 			throw new Error(
-				"The backend did not accept this Minecraft session. Try signing in to the account again.",
+				`The backend at ${this.backendUrl()} did not accept this Minecraft session. Make sure it is running the newest build.`,
 			)
 		}
 		return this.load()
 	}
 
-	/** Puts a cape on, or takes it off when the id is null. */
+	/**
+	 * Puts a cosmetic on, or takes it off when the id is null.
+	 *
+	 * The Minecraft token travels with the request, so this works whether or not a website session
+	 * could be obtained first. A session cookie is sent as well when there is one, which is what an
+	 * older backend understands.
+	 */
 	async equip(cosmeticId: string | null): Promise<CosmeticWardrobe> {
 		const account = await this.auth.selected()
 		if (account === undefined) {
 			throw new Error("Sign in with a Microsoft account first")
 		}
 
-		const session = await this.ensureSession(account)
-		if (session === null) {
+		const accessToken = await this.auth.validAccessToken(account.id)
+		if (accessToken === null) {
 			throw new Error(
-				"The backend did not accept this Minecraft session. Try signing in to the account again.",
+				"This Minecraft session has expired. Open Accounts and sign in to it again.",
 			)
+		}
+
+		const session = await this.ensureSession(account)
+		const headers: Record<string, string> = { "content-type": "application/json" }
+		if (session !== null) {
+			headers.cookie = `${SESSION_COOKIE}=${session}`
 		}
 
 		const result = await this.call("/v1/cosmetics/equip", {
 			method: "POST",
-			headers: {
-				"content-type": "application/json",
-				cookie: `${SESSION_COOKIE}=${session}`,
-			},
-			body: JSON.stringify({ name: account.username, id: cosmeticId }),
+			headers,
+			body: JSON.stringify({ name: account.username, id: cosmeticId, accessToken }),
 		})
 
 		if (!result.ok) {
-			throw new Error(result.error === "" ? "That cape could not be equipped" : result.error)
+			throw new Error(
+				result.error === ""
+					? `The cosmetics server at ${this.backendUrl()} could not be reached`
+					: result.error,
+			)
 		}
 		return this.load()
 	}
