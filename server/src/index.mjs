@@ -7,6 +7,7 @@ import { pipeline } from "node:stream/promises"
 
 import { Store, normaliseCosmeticId } from "./store.mjs"
 import { Accounts } from "./accounts.mjs"
+import { minecraftProfile } from "./minecraft.mjs"
 import { serveSite } from "./site.mjs"
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -28,7 +29,8 @@ const CLIENT_KEY = process.env.CLIENT_KEY ?? ""
 const PRESENCE_TTL_MS = Number.parseInt(process.env.PRESENCE_TTL_SECONDS ?? "300", 10) * 1000
 const RETENTION_MS = Number.parseInt(process.env.RETENTION_DAYS ?? "7", 10) * 24 * 60 * 60 * 1000
 
-const MAX_BODY_BYTES = 16 * 1024
+// A Minecraft access token is a long JWT, so the body budget has to clear it comfortably.
+const MAX_BODY_BYTES = 64 * 1024
 const RATE_LIMIT_WINDOW_MS = 60 * 1000
 const RATE_LIMIT_MAX = 240
 // Guessing a password should be slow, so sign in and sign up get their own much tighter budget.
@@ -65,6 +67,13 @@ function pathOf(request) {
 	const target = request.url ?? "/"
 	const mark = target.indexOf("?")
 	return mark === -1 ? target : target.slice(0, mark)
+}
+
+/** The query string of a request, as searchable parameters. */
+function queryOf(request) {
+	const target = request.url ?? ""
+	const mark = target.indexOf("?")
+	return new URLSearchParams(mark === -1 ? "" : target.slice(mark + 1))
 }
 
 function counted(bucket, address, limit) {
@@ -389,6 +398,22 @@ function statistics() {
 	}
 }
 
+/**
+ * Everything a signed in person is shown about themselves, in one payload: the account, the in
+ * game profile behind it, the capes they own and whatever is being announced.
+ */
+function overviewFor(user) {
+	const linked = String(user.minecraft ?? "")
+	const profile = linked === "" ? null : store.profile(linked)
+	const owned = (profile?.owned ?? []).map((id) => store.cosmetic(id)).filter(Boolean)
+	return {
+		user: accounts.publicUser(user),
+		profile,
+		owned,
+		announcements: store.announcements(),
+	}
+}
+
 async function handleAuth(request, response, path) {
 	const route = `${request.method} ${path}`
 
@@ -446,6 +471,75 @@ async function handleAuth(request, response, path) {
 		return true
 	}
 
+	/**
+	 * Sign in with the Minecraft account the launcher already holds.
+	 *
+	 * The launcher posts its Minecraft access token, the server asks Mojang whose it is, and the
+	 * answer becomes the account. Nothing is trusted from the body itself, and the token is not
+	 * kept once the check is done.
+	 */
+	if (route === `POST ${AUTH_PREFIX}/minecraft`) {
+		const payload = await readJson(request)
+		if (payload === null) {
+			send(response, 400, { error: "the body is not valid json" })
+			return true
+		}
+
+		const profile = await minecraftProfile(payload.accessToken)
+		if (profile === null) {
+			send(response, 401, {
+				error: "Minecraft did not accept that session, sign in again in the launcher",
+			})
+			return true
+		}
+
+		const result = accounts.signInWithMinecraft(profile)
+		if (result.error !== undefined) {
+			send(response, 400, { error: result.error })
+			return true
+		}
+
+		const session = accounts.createSession(result.user.username)
+		if (result.created) {
+			console.log(`[halcyon] ${result.user.username} joined through Minecraft`)
+		}
+		send(
+			response,
+			200,
+			{
+				user: accounts.publicUser(result.user),
+				created: result.created === true,
+				token: session.token,
+				maxAgeSeconds: session.maxAgeSeconds,
+				overview: overviewFor(result.user),
+			},
+			{ "set-cookie": sessionCookie(session.token, session.maxAgeSeconds) },
+		)
+		return true
+	}
+
+	/**
+	 * Turns a session token into a browser cookie, so the launcher can open the website with the
+	 * player already signed in rather than asking them to type anything.
+	 */
+	if (route === `GET ${AUTH_PREFIX}/handoff`) {
+		const token = queryOf(request).get("token") ?? ""
+		const user = accounts.sessionUser(token)
+		if (user === null) {
+			response.writeHead(302, { location: "/login", "cache-control": "no-store" })
+			response.end()
+			return true
+		}
+
+		response.writeHead(302, {
+			location: "/account",
+			"cache-control": "no-store",
+			"set-cookie": sessionCookie(token, accounts.sessionMaxAge()),
+		})
+		response.end()
+		return true
+	}
+
 	if (route === `POST ${AUTH_PREFIX}/logout`) {
 		accounts.destroySession(sessionToken(request))
 		send(response, 200, { ok: true }, { "set-cookie": sessionCookie("", 0) })
@@ -469,15 +563,7 @@ async function handleAccount(request, response, path) {
 	const route = `${request.method} ${path}`
 
 	if (route === `GET ${ACCOUNT_PREFIX}/overview`) {
-		const linked = String(user.minecraft ?? "")
-		const profile = linked === "" ? null : store.profile(linked)
-		const owned = (profile?.owned ?? []).map((id) => store.cosmetic(id)).filter(Boolean)
-		send(response, 200, {
-			user: accounts.publicUser(user),
-			profile,
-			owned,
-			announcements: store.announcements(),
-		})
+		send(response, 200, overviewFor(user))
 		return true
 	}
 
@@ -488,7 +574,42 @@ async function handleAccount(request, response, path) {
 			return true
 		}
 
+		// A token means the launcher is linking, and that link is proven rather than claimed.
+		if (typeof payload.accessToken === "string" && payload.accessToken.trim() !== "") {
+			const profile = await minecraftProfile(payload.accessToken)
+			if (profile === null) {
+				send(response, 401, {
+					error: "Minecraft did not accept that session, sign in again in the launcher",
+				})
+				return true
+			}
+
+			const linked = accounts.linkVerified(user.username, profile)
+			if (linked.error !== undefined) {
+				send(response, 409, { error: linked.error })
+				return true
+			}
+			send(response, 200, { user: accounts.publicUser(linked.user), verified: true })
+			return true
+		}
+
 		const result = accounts.linkMinecraft(user.username, payload.minecraft)
+		if (result.error !== undefined) {
+			send(response, 400, { error: result.error })
+			return true
+		}
+		send(response, 200, { user: accounts.publicUser(result.user), verified: false })
+		return true
+	}
+
+	if (route === `POST ${ACCOUNT_PREFIX}/email`) {
+		const payload = await readJson(request)
+		if (payload === null) {
+			send(response, 400, { error: "the body is not valid json" })
+			return true
+		}
+
+		const result = accounts.setEmail(user.username, payload.email)
 		if (result.error !== undefined) {
 			send(response, 400, { error: result.error })
 			return true
@@ -631,12 +752,12 @@ async function handleCosmetics(request, response, path) {
 		return true
 	}
 
+	/**
+	 * Equipping happens two ways: the mod sends the client key, or a signed in player picks a cape
+	 * in the launcher and the session speaks for them. A session may only dress its own linked
+	 * account, which is what stops one player wearing another player's grant.
+	 */
 	if (route === `POST ${COSMETIC_PREFIX}/equip`) {
-		if (!clientAllowed(request)) {
-			send(response, 401, { error: "the client key is missing or wrong" })
-			return true
-		}
-
 		const payload = await readJson(request)
 		if (payload === null) {
 			send(response, 400, { error: "the body is not valid json" })
@@ -646,6 +767,14 @@ async function handleCosmetics(request, response, path) {
 		const name = validName(payload.name)
 		if (name === "") {
 			send(response, 400, { error: "a player name is required" })
+			return true
+		}
+
+		const user = currentUser(request)
+		const owns =
+			user !== null && String(user.minecraft ?? "").toLowerCase() === name.toLowerCase()
+		if (!clientAllowed(request) && !owns) {
+			send(response, 401, { error: "the client key is missing or wrong" })
 			return true
 		}
 
@@ -706,7 +835,11 @@ async function handleCosmetics(request, response, path) {
 			send(response, 400, { error: "a player name is required" })
 			return true
 		}
-		send(response, 200, store.profile(name))
+
+		// The launcher wardrobe wants the whole cape record, not only its id.
+		const profile = store.profile(name)
+		const owned = (profile?.owned ?? []).map((id) => store.cosmetic(id)).filter(Boolean)
+		send(response, 200, { ...profile, cosmetics: owned })
 		return true
 	}
 
