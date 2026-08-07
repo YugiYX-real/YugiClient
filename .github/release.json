@@ -1,5 +1,5 @@
 {
-  "tag": "v1.1.0",
-  "requestedAt": "2026-08-07T01:20:00Z",
-  "summary": "Square instance artwork in the instances grid, dashboard artwork for recently played instances, wrapping toolbars and tab strips so page headers can no longer be clipped, no stray horizontal scrollbars, and a release publisher that can see its own draft"
+  "tag": "v1.2.0",
+  "requestedAt": "2026-08-07T01:42:00Z",
+  "summary": "The Halcyon companion mod now ships inside the installer and is installed into every Fabric 1.21.x instance on launch, including instances that already exist, together with Fabric API. Also carries the square instance artwork, dashboard artwork for recently played instances and the wrapping toolbars and tab strips"
 }
