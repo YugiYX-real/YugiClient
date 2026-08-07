@@ -1,5 +1,5 @@
 {
-  "tag": "v1.2.1",
-  "requestedAt": "2026-08-07T01:58:00Z",
-  "summary": "Supersedes v1.2.0. The companion mod is now only installed into the Fabric versions it was compiled for and is removed again when an instance moves to another version, so it can never crash a launch. Minecraft crash reports are read back into the instance log and the toast, instead of only leaving a file path behind."
+  "tag": "v1.2.2",
+  "requestedAt": "2026-08-07T03:06:00Z",
+  "summary": "The in game companion mod now compiles and ships for Minecraft 1.21.11, so launching a Fabric 1.21.11 instance installs the Halcyon badge, the overlay and Fabric API automatically. Key bindings use the new category type and the player roster reads the name through the current entity API."
 }
