@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Halcyon &mdash; a premium Minecraft client</title>
+		<meta
+			name="description"
+			content="Halcyon is a premium Minecraft launcher and client by YugiYX, with instances, mods, cosmetics and an in game overlay."
+		/>
+		<link rel="stylesheet" href="/styles.css" />
+	</head>
+	<body>
+		<header class="top">
+			<div class="wrap">
+				<a class="brand" href="/"><span class="mark">&#10022;</span> HALCYON</a>
+				<nav class="links">
+					<a href="/download">Download</a>
+					<a href="/cosmetics">Cosmetics</a>
+					<a href="/status">Status</a>
+				</nav>
+				<div class="session" id="session"></div>
+			</div>
+		</header>
+
+		<main>
+			<div class="wrap">
+				<section class="hero">
+					<span class="eyebrow">&#10022; Built by YugiYX</span>
+					<h1>Minecraft, the way it should have shipped.</h1>
+					<p class="lead">
+						Halcyon is a launcher and an in game client in one. Instances that stay
+						tidy, mods that install themselves, an overlay you actually want on screen,
+						and cosmetics that only ever come from us.
+					</p>
+					<div class="row">
+						<a class="button primary" href="/register">Create your account</a>
+						<a class="button" href="/download">Download the launcher</a>
+					</div>
+				</section>
+
+				<section class="section">
+					<div class="grid" id="stats">
+						<div class="card stat">
+							<span class="value" id="stat-online">&mdash;</span>
+							<span class="label">Playing right now</span>
+						</div>
+						<div class="card stat">
+							<span class="value" id="stat-registered">&mdash;</span>
+							<span class="label">Registered accounts</span>
+						</div>
+						<div class="card stat">
+							<span class="value" id="stat-players">&mdash;</span>
+							<span class="label">Players seen</span>
+						</div>
+						<div class="card stat">
+							<span class="value" id="stat-cosmetics">&mdash;</span>
+							<span class="label">Cosmetics released</span>
+						</div>
+					</div>
+				</section>
+
+				<section class="section" id="news-section" hidden>
+					<div class="section-head">
+						<h2>Latest</h2>
+						<p>Straight from the client</p>
+					</div>
+					<div class="grid" id="news"></div>
+				</section>
+
+				<section class="section">
+					<div class="section-head">
+						<h2>What you get</h2>
+					</div>
+					<div class="grid">
+						<div class="card">
+							<h3>Instances that behave</h3>
+							<p>
+								Fabric, Forge, Quilt and NeoForge, each in its own folder with its
+								own memory, its own Java and its own icon. Nothing leaks between
+								them.
+							</p>
+						</div>
+						<div class="card">
+							<h3>Mods in two clicks</h3>
+							<p>
+								Browse Modrinth inside the launcher, see the real icons, install
+								straight into an instance and update everything at once.
+							</p>
+						</div>
+						<div class="card">
+							<h3>A client, not a skin</h3>
+							<p>
+								A custom main menu, a custom loading screen, an overlay with fps,
+								coordinates and ping, and a badge so other Halcyon players stand
+								out.
+							</p>
+						</div>
+						<div class="card">
+							<h3>Cosmetics worth wearing</h3>
+							<p>
+								Capes are handed out by us, never bought by a client and never
+								spoofed. Wear them from the wardrobe in the main menu.
+							</p>
+						</div>
+						<div class="card">
+							<h3>Sign in once</h3>
+							<p>
+								Microsoft accounts only, with the session refreshed in the
+								background. No daily login, no surprise sign outs mid session.
+							</p>
+						</div>
+						<div class="card">
+							<h3>Updates that arrive</h3>
+							<p>
+								The launcher checks our own release feed and updates itself. You
+								never reinstall to get a fix.
+							</p>
+						</div>
+					</div>
+				</section>
+			</div>
+		</main>
+
+		<footer>
+			<div class="wrap">
+				<span>&copy; <span id="year">2026</span> YugiYX. Halcyon is not affiliated with Mojang or Microsoft.</span>
+				<nav>
+					<a href="/download">Download</a>
+					<a href="/cosmetics">Cosmetics</a>
+					<a href="/status">Status</a>
+					<a href="/terms">Terms</a>
+					<a href="/privacy">Privacy</a>
+					<a href="/imprint">Imprint</a>
+				</nav>
+			</div>
+		</footer>
+
+		<script src="/app.js"></script>
+		<script>
+			async function load() {
+				try {
+					const stats = await Halcyon.api("/v1/stats")
+					document.getElementById("stat-online").textContent = Halcyon.number(stats.online)
+					document.getElementById("stat-registered").textContent = Halcyon.number(
+						stats.registered,
+					)
+					document.getElementById("stat-players").textContent = Halcyon.number(
+						stats.playersKnown,
+					)
+					document.getElementById("stat-cosmetics").textContent = Halcyon.number(
+						stats.cosmetics,
+					)
+				} catch {
+					// The page is still worth reading without live numbers.
+				}
+
+				try {
+					const payload = await Halcyon.api("/v1/announcements")
+					const entries = (payload.announcements ?? []).slice(0, 3)
+					if (entries.length === 0) {
+						return
+					}
+
+					document.getElementById("news-section").hidden = false
+					document.getElementById("news").innerHTML = entries
+						.map((entry) => {
+							const title = Halcyon.escape(entry.title ?? "Update")
+							const body = Halcyon.escape(entry.body ?? entry.message ?? "")
+							return `<div class="card"><h3>${title}</h3><p>${body}</p></div>`
+						})
+						.join("")
+				} catch {
+					// Same again: announcements are a bonus, not the page.
+				}
+			}
+
+			load()
+		</script>
+	</body>
+</html>

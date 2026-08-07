@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Privacy &mdash; Halcyon</title>
+		<link rel="stylesheet" href="/styles.css" />
+	</head>
+	<body>
+		<header class="top">
+			<div class="wrap">
+				<a class="brand" href="/"><span class="mark">&#10022;</span> HALCYON</a>
+				<nav class="links">
+					<a href="/download">Download</a>
+					<a href="/cosmetics">Cosmetics</a>
+					<a href="/status">Status</a>
+				</nav>
+				<div class="session" id="session"></div>
+			</div>
+		</header>
+
+		<main>
+			<div class="wrap prose">
+				<h1>Privacy</h1>
+				<p class="updated">Last updated 7 August 2026</p>
+				<p>
+					The short version: we keep the least we can, we do not sell anything to anyone,
+					and there are no third party trackers or advertising scripts on this site.
+				</p>
+
+				<h2>What we store when you register</h2>
+				<ul>
+					<li>Your username and email address.</li>
+					<li>
+						Your password, only as a scrypt hash with a random salt. The password
+						itself is never written down and cannot be recovered from what we hold.
+					</li>
+					<li>The Minecraft name you choose to link, if you link one.</li>
+					<li>When the account was created and when it last signed in.</li>
+				</ul>
+
+				<h2>What we store when you play</h2>
+				<ul>
+					<li>
+						Your in game name, the client version and the time of the last heartbeat,
+						so the online counter and the player badge work.
+					</li>
+					<li>Which cosmetics you were granted and which one you are wearing.</li>
+				</ul>
+				<p>
+					Presence records are deleted automatically once an account has not been seen for
+					seven days.
+				</p>
+
+				<h2>Cookies</h2>
+				<p>
+					One cookie, named <code>halcyon_session</code>, which holds a random session
+					token after you sign in. It is set to HttpOnly and SameSite, it expires after
+					thirty days, and it exists only to keep you signed in. There are no analytics or
+					advertising cookies, so there is no consent banner to click away.
+				</p>
+
+				<h2>Microsoft sign in</h2>
+				<p>
+					The launcher signs in to Minecraft through Microsoft. That exchange happens
+					between your computer and Microsoft. Your Microsoft password never reaches us,
+					and the resulting session token is stored on your own machine, not on this
+					server.
+				</p>
+
+				<h2>Server logs</h2>
+				<p>
+					The service keeps short lived operational logs, which can include ip addresses,
+					for security and debugging. They are not used to build profiles.
+				</p>
+
+				<h2>Who else sees it</h2>
+				<p>
+					Nobody. Data lives on a single server rented in Germany and is not shared,
+					sold, or handed to advertisers. The launcher does contact Microsoft, Mojang,
+					Modrinth and GitHub while it works, because that is where accounts, mods and
+					releases come from.
+				</p>
+
+				<h2>Your rights</h2>
+				<p>
+					Under the GDPR you can ask what we hold about you, correct it, or have it
+					deleted. Deleting your account removes your login, your linked name and your
+					cosmetic grants. Write to the address on the <a href="/imprint">imprint</a>
+					page and we will act within a month.
+				</p>
+			</div>
+		</main>
+
+		<footer>
+			<div class="wrap">
+				<span>&copy; <span id="year">2026</span> YugiYX</span>
+				<nav>
+					<a href="/terms">Terms</a>
+					<a href="/privacy">Privacy</a>
+					<a href="/imprint">Imprint</a>
+				</nav>
+			</div>
+		</footer>
+
+		<script src="/app.js"></script>
+	</body>
+</html>
