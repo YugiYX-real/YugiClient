@@ -8,7 +8,10 @@ import net.minecraft.text.TextColor;
 /**
  * Prefixes the nametag of a Halcyon player with the client badge.
  *
- * <p>Only players in the roster are decorated, so vanilla players are never touched.
+ * <p>By default only players in the roster are decorated, so vanilla players are never touched.
+ * Because a player never sees their own nameplate, an empty roster means no badge is visible
+ * anywhere; {@link HalcyonConfig#badgeAllPlayers} exists so the badge can be seen without a roster
+ * endpoint being configured.
  */
 public final class HalcyonBadge {
 	private static final String FALLBACK_GLYPH = "\u2726";
@@ -26,7 +29,7 @@ public final class HalcyonBadge {
 		}
 
 		String plain = label.getString();
-		if (!HalcyonRoster.get().isMember(plain)) {
+		if (!config.badgeAllPlayers && !HalcyonRoster.get().isMember(plain)) {
 			return label;
 		}
 

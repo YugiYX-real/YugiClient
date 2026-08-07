@@ -18,6 +18,14 @@ public final class HalcyonConfig {
 	/** Draw the Halcyon badge in front of the nametag of other Halcyon players. */
 	public boolean badgeEnabled = true;
 
+	/**
+	 * Badge every player instead of only roster members.
+	 *
+	 * <p>Useful while no roster endpoint is configured, because you never see your own nameplate and
+	 * would otherwise never see the badge at all.
+	 */
+	public boolean badgeAllPlayers = false;
+
 	/** The glyph drawn in front of the name. */
 	public String badgeText = "\u2726";
 
@@ -26,6 +34,9 @@ public final class HalcyonConfig {
 
 	/** Optional roster endpoint that lists the players running Halcyon. */
 	public String rosterUrl = "";
+
+	/** Replace the vanilla resource reload screen with the Halcyon one. */
+	public boolean splashEnabled = true;
 
 	/** Master switch for the on screen overlay. */
 	public boolean hudEnabled = true;
