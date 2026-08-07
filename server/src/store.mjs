@@ -13,6 +13,9 @@ const PERSIST_DELAY_MS = 2000
 // Cosmetic ids end up in urls and file names, so they are kept to a short lowercase slug.
 const COSMETIC_ID = /^[a-z0-9][a-z0-9_-]{0,47}$/
 
+/** The most frames one cosmetic may be built from, whether stacked or uploaded one by one. */
+const MAX_FRAMES = 64
+
 /**
  * Every kind of cosmetic the client knows how to wear.
  *
@@ -59,6 +62,35 @@ function normaliseRarity(value) {
 	return RARITIES.includes(text) ? text : "common"
 }
 
+/**
+ * The addresses of the pictures an animation is built from, one per frame.
+ *
+ * This is how an owner brings an animation of their own: upload a picture for every frame and the
+ * client plays them in this order, in the world as well as in the wardrobe. Anything that is not a
+ * usable address is dropped rather than stored, so a bad entry cannot break a client later.
+ */
+function normaliseFrameTextures(value) {
+	if (!Array.isArray(value)) {
+		return []
+	}
+
+	const frames = []
+	for (const entry of value) {
+		const text = typeof entry === "string" ? entry.trim() : ""
+		if (text === "" || text.length > 300) {
+			continue
+		}
+		if (!text.startsWith("/") && !text.startsWith("http://") && !text.startsWith("https://")) {
+			continue
+		}
+		frames.push(text)
+		if (frames.length === MAX_FRAMES) {
+			break
+		}
+	}
+	return frames
+}
+
 function clamp(value, low, high, fallback) {
 	const number = typeof value === "number" ? value : Number.parseInt(String(value ?? ""), 10)
 	if (!Number.isFinite(number)) {
@@ -78,6 +110,36 @@ function emptyEquipped() {
 		equipped[slot] = null
 	}
 	return equipped
+}
+
+/** Keeps announcements to the shape every reader expects, and drops the empty ones. */
+function shapeAnnouncements(entries) {
+	if (!Array.isArray(entries)) {
+		return []
+	}
+
+	const shaped = []
+	for (const entry of entries.slice(0, 40)) {
+		const source = entry ?? {}
+		const title = typeof source.title === "string" ? source.title.trim().slice(0, 120) : ""
+		const raw = typeof source.body === "string" ? source.body : (source.message ?? "")
+		const body = typeof raw === "string" ? raw.trim().slice(0, 1000) : ""
+		if (title === "" && body === "") {
+			continue
+		}
+
+		shaped.push({
+			title,
+			body,
+			// An announcement that was already posted keeps its date, so editing a typo does not
+			// make it look brand new everywhere it is shown.
+			postedAt:
+				typeof source.postedAt === "string" && !Number.isNaN(Date.parse(source.postedAt))
+					? source.postedAt
+					: new Date().toISOString(),
+		})
+	}
+	return shaped
 }
 
 /**
@@ -130,7 +192,11 @@ export class Store {
 		let touched = false
 
 		for (const [id, record] of Object.entries(this.state.cosmetics)) {
-			if (record.slot === undefined || record.animated === undefined) {
+			if (
+				record.slot === undefined ||
+				record.animated === undefined ||
+				record.frameTextures === undefined
+			) {
 				this.state.cosmetics[id] = this.shapeCosmetic(id, record, record)
 				touched = true
 			}
@@ -238,8 +304,11 @@ export class Store {
 	}
 
 	updateAnnouncements(entries) {
-		this.state.announcements = entries
+		this.state.announcements = shapeAnnouncements(entries)
 		this.schedulePersist()
+		// Written straight away rather than on the debounce, because an announcement is something
+		// the owner just pressed save on and expects to survive a restart a second later.
+		this.persist()
 		return this.state.announcements
 	}
 
@@ -275,9 +344,19 @@ export class Store {
 	/** Builds the stored shape of one cosmetic from whatever the panel sent. */
 	shapeCosmetic(id, entry, existing) {
 		const type = normaliseCosmeticType(entry.type ?? existing.type)
-		const animated =
-			typeof entry.animated === "boolean" ? entry.animated : (existing.animated ?? false)
-		const frames = clamp(entry.frames ?? existing.frames, 1, 64, 1)
+		const frameTextures = normaliseFrameTextures(entry.frameTextures ?? existing.frameTextures)
+		const separate = frameTextures.length > 1
+
+		// A set of uploaded frames is an animation by definition, so it decides both answers and
+		// the switch in the panel only matters for a stacked strip.
+		const animated = separate
+			? true
+			: typeof entry.animated === "boolean"
+				? entry.animated
+				: (existing.animated ?? false)
+		const frames = separate
+			? frameTextures.length
+			: clamp(entry.frames ?? existing.frames, 1, MAX_FRAMES, 1)
 
 		return {
 			id,
@@ -293,7 +372,8 @@ export class Store {
 				typeof entry.texture === "string" && entry.texture.trim() !== ""
 					? entry.texture.trim()
 					: (existing.texture ?? `/v1/cosmetics/textures/${id}.png`),
-			// An animated texture is one tall strip of frames, played top to bottom on a loop.
+			// Either one picture per frame, or every frame stacked into one tall strip.
+			frameTextures,
 			animated: animated && frames > 1,
 			frames: animated ? Math.max(2, frames) : 1,
 			frameMs: clamp(entry.frameMs ?? existing.frameMs, 20, 5000, 100),

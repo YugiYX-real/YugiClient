@@ -1,5 +1,6 @@
 package gg.halcyon.companion;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -10,14 +11,17 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Talks to the Halcyon backend.
  *
  * <p>Every minute the client announces itself and pulls the list of players who are online right
- * now, which is what makes the badge mean something. Branding is pulled at the same time so the
- * menu message can be changed without shipping a new build. Every call is asynchronous and every
- * failure is silent by design: the backend going down must never affect the game.
+ * now, which is what makes the badge mean something. Branding and announcements are pulled at the
+ * same time, so what the owner writes in the panel reaches the main menu without shipping a new
+ * build. Every call is asynchronous and every failure is silent by design: the backend going down
+ * must never affect the game.
  */
 public final class HalcyonBackend {
 	private static final HalcyonBackend INSTANCE = new HalcyonBackend();
@@ -31,7 +35,9 @@ public final class HalcyonBackend {
 
 	private volatile boolean syncing;
 
-	private volatile String menuMessage = "";
+	private volatile String published = "";
+
+	private volatile List<String> announcements = List.of();
 
 	private volatile int onlineCount;
 
@@ -41,9 +47,22 @@ public final class HalcyonBackend {
 		return INSTANCE;
 	}
 
-	/** Message published by the backend, shown on the main menu when it is not empty. */
+	/**
+	 * The line shown on the main menu.
+	 *
+	 * <p>A message set in the branding always wins, and otherwise the newest announcement is used,
+	 * so writing one in the panel is enough to have it reach every player in game.
+	 */
 	public String menuMessage() {
-		return menuMessage;
+		if (!published.isEmpty()) {
+			return published;
+		}
+		return announcements.isEmpty() ? "" : announcements.get(0);
+	}
+
+	/** Everything the owner is announcing, newest first. */
+	public List<String> announcements() {
+		return announcements;
 	}
 
 	/** How many Halcyon players the backend reported as online. */
@@ -95,6 +114,7 @@ public final class HalcyonBackend {
 			}
 			roster(base);
 			branding(base);
+			fetchAnnouncements(base);
 		} catch (RuntimeException error) {
 			syncing = false;
 			HalcyonCompanion.LOGGER.debug("The Halcyon backend address is not usable");
@@ -164,14 +184,80 @@ public final class HalcyonBackend {
 
 						JsonObject object = root.getAsJsonObject();
 						if (object.has("menuMessage")) {
-							menuMessage = object.get("menuMessage").getAsString();
+							published = text(object, "menuMessage");
 						}
 						if (object.has("accentColor")) {
-							HalcyonConfig.get().badgeColor = object.get("accentColor").getAsString();
+							String accent = text(object, "accentColor");
+							if (!accent.isEmpty()) {
+								HalcyonConfig.get().badgeColor = accent;
+							}
 						}
 					} catch (RuntimeException parseError) {
 						HalcyonCompanion.LOGGER.debug("The Halcyon branding payload could not be parsed");
 					}
 				});
+	}
+
+	/** Pulls what the owner is announcing, so the menu can carry the newest one. */
+	private void fetchAnnouncements(String base) {
+		HttpRequest get = request(base + "/v1/announcements").GET().build();
+
+		http.sendAsync(get, HttpResponse.BodyHandlers.ofString())
+				.whenComplete((response, error) -> {
+					if (error != null || response == null || response.statusCode() != 200) {
+						return;
+					}
+
+					try {
+						JsonElement root = JsonParser.parseString(response.body());
+						if (!root.isJsonObject()) {
+							return;
+						}
+
+						JsonArray array = root.getAsJsonObject().getAsJsonArray("announcements");
+						if (array == null) {
+							return;
+						}
+
+						List<String> lines = new ArrayList<>();
+						for (JsonElement element : array) {
+							if (!element.isJsonObject()) {
+								continue;
+							}
+
+							JsonObject entry = element.getAsJsonObject();
+							String title = text(entry, "title");
+							String body = text(entry, "body");
+							if (body.isEmpty()) {
+								body = text(entry, "message");
+							}
+
+							String line;
+							if (title.isEmpty()) {
+								line = body;
+							} else if (body.isEmpty()) {
+								line = title;
+							} else {
+								line = title + " - " + body;
+							}
+
+							if (!line.isBlank()) {
+								lines.add(line.trim());
+							}
+						}
+						announcements = List.copyOf(lines);
+					} catch (RuntimeException parseError) {
+						HalcyonCompanion.LOGGER.debug(
+								"The Halcyon announcements could not be parsed");
+					}
+				});
+	}
+
+	private static String text(JsonObject object, String key) {
+		JsonElement value = object.get(key);
+		if (value == null || value.isJsonNull() || !value.isJsonPrimitive()) {
+			return "";
+		}
+		return value.getAsString().trim();
 	}
 }
