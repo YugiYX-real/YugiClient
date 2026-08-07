@@ -19,6 +19,13 @@ const store = new Store(DATA_FILE, PRESENCE_TTL_MS)
 const startedAt = Date.now()
 const hits = new Map()
 
+/** The path without the query string. Parsed by hand so no base address is needed. */
+function pathOf(request) {
+	const target = request.url ?? "/"
+	const mark = target.indexOf("?")
+	return mark === -1 ? target : target.slice(0, mark)
+}
+
 function rateLimited(address) {
 	const now = Date.now()
 	const entry = hits.get(address)
@@ -78,13 +85,13 @@ function adminAllowed(request) {
 	return request.headers.authorization === `Bearer ${ADMIN_TOKEN}`
 }
 
-async function handle(request, response, url) {
-	const route = `${request.method} ${url.pathname}`
-
+async function handle(request, response, path) {
 	if (request.method === "OPTIONS") {
 		send(response, 204)
 		return
 	}
+
+	const route = `${request.method} ${path}`
 
 	if (route === "GET /v1/health") {
 		send(response, 200, {
@@ -195,10 +202,10 @@ const server = createServer((request, response) => {
 		return
 	}
 
-	const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`)
+	const path = pathOf(request)
 
-	handle(request, response, url).catch((error) => {
-		console.error("[halcyon]", request.method, url.pathname, error.message)
+	handle(request, response, path).catch((error) => {
+		console.error("[halcyon]", request.method, path, error.message)
 		if (!response.headersSent) {
 			send(response, 500, { error: "the request could not be handled" })
 		}
@@ -222,7 +229,7 @@ for (const signal of ["SIGINT", "SIGTERM"]) {
 }
 
 server.listen(PORT, HOST, () => {
-	console.log(`[halcyon] backend listening on http://${HOST}:${PORT}`)
+	console.log(`[halcyon] backend listening on ${HOST} port ${PORT}`)
 	console.log(`[halcyon] state file ${DATA_FILE}`)
 	if (ADMIN_TOKEN === "") {
 		console.warn("[halcyon] no admin token is set, the branding endpoints are disabled")
