@@ -1,11 +1,12 @@
 import { createServer } from "node:http"
 import { createReadStream, createWriteStream } from "node:fs"
-import { mkdir, readdir, rename, stat, unlink } from "node:fs/promises"
+import { mkdir, readdir, rename, stat, unlink, writeFile } from "node:fs/promises"
 import { dirname, extname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { pipeline } from "node:stream/promises"
 
 import { COSMETIC_SLOTS, COSMETIC_TYPES, Store, normaliseCosmeticId } from "./store.mjs"
+import { MAX_FRAMES, gifToFrames } from "./gif.mjs"
 import { collectFiles, normaliseVersion, writeFeeds } from "./updates.mjs"
 import { Accounts } from "./accounts.mjs"
 import { minecraftProfile } from "./minecraft.mjs"
@@ -32,6 +33,8 @@ const RETENTION_MS = Number.parseInt(process.env.RETENTION_DAYS ?? "7", 10) * 24
 
 // A Minecraft access token is a long JWT, so the body budget has to clear it comfortably.
 const MAX_BODY_BYTES = 64 * 1024
+// An animation arrives as one whole gif, which is a different order of size to a json body.
+const MAX_UPLOAD_BYTES = 16 * 1024 * 1024
 const RATE_LIMIT_WINDOW_MS = 60 * 1000
 const RATE_LIMIT_MAX = 240
 // Guessing a password should be slow, so sign in and sign up get their own much tighter budget.
@@ -53,6 +56,7 @@ const CONTENT_TYPES = {
 	".yaml": "text/yaml; charset=utf-8",
 	".json": "application/json; charset=utf-8",
 	".png": "image/png",
+	".gif": "image/gif",
 	".zip": "application/zip",
 	".gz": "application/gzip",
 }
@@ -123,6 +127,26 @@ function readBody(request) {
 			chunks.push(chunk)
 		})
 		request.on("end", () => accept(Buffer.concat(chunks).toString("utf8")))
+		request.on("error", reject)
+	})
+}
+
+/** Reads a whole upload into memory, which is what taking a gif apart needs. */
+function readBinary(request, limit) {
+	return new Promise((accept, reject) => {
+		const chunks = []
+		let size = 0
+
+		request.on("data", (chunk) => {
+			size += chunk.length
+			if (size > limit) {
+				reject(new Error("that upload is too large"))
+				request.destroy()
+				return
+			}
+			chunks.push(chunk)
+		})
+		request.on("end", () => accept(Buffer.concat(chunks)))
 		request.on("error", reject)
 	})
 }
@@ -788,6 +812,88 @@ async function handleCosmetics(request, response, path) {
 
 	if (route === `GET ${COSMETIC_PREFIX}/types`) {
 		send(response, 200, { types: COSMETIC_TYPES, slots: COSMETIC_SLOTS })
+		return true
+	}
+
+	/**
+	 * Uploads a whole animation as one gif.
+	 *
+	 * Drawing an animation frame by frame and then exporting every frame by hand is busy work, so
+	 * the panel sends the gif exactly as it came out of whatever drew it and the server takes it
+	 * apart: one png per frame, the first frame kept as the still picture for lists, the gif itself
+	 * kept so the website can play it, and the frame time read out of the gif so the animation runs
+	 * at the speed it was drawn at. Frames left behind by a longer animation are removed, so
+	 * replacing an animation cannot leave a tail of old frames playing.
+	 */
+	if (route === `POST ${COSMETIC_PREFIX}/animation`) {
+		if (!requireAdmin(request, response)) {
+			return true
+		}
+
+		const id = normaliseCosmeticId(queryOf(request).get("id"))
+		if (id === "") {
+			send(response, 400, { error: "a short lowercase cosmetic id is required" })
+			return true
+		}
+
+		let bytes = null
+		try {
+			bytes = await readBinary(request, MAX_UPLOAD_BYTES)
+		} catch (error) {
+			send(response, 413, { error: error.message })
+			return true
+		}
+
+		let animation = null
+		try {
+			animation = gifToFrames(bytes, MAX_FRAMES)
+		} catch (error) {
+			send(response, 400, { error: error.message })
+			return true
+		}
+
+		await mkdir(COSMETIC_DIR, { recursive: true })
+
+		const frameTextures = []
+		for (let index = 0; index < animation.frames.length; index += 1) {
+			const name = `${id}.f${index + 1}.png`
+			await writeFile(join(COSMETIC_DIR, name), animation.frames[index])
+			frameTextures.push(`${COSMETIC_TEXTURE_PREFIX}/${name}`)
+		}
+
+		await writeFile(join(COSMETIC_DIR, `${id}.png`), animation.frames[0])
+		await writeFile(join(COSMETIC_DIR, `${id}.gif`), bytes)
+
+		for (let index = animation.frames.length; index < MAX_FRAMES; index += 1) {
+			await unlink(join(COSMETIC_DIR, `${id}.f${index + 1}.png`)).catch(() => undefined)
+		}
+
+		const patch = {
+			id,
+			frameTextures,
+			frames: frameTextures.length,
+			frameMs: animation.frameMs,
+			animated: true,
+			texture: `${COSMETIC_TEXTURE_PREFIX}/${id}.png`,
+		}
+		// An existing cosmetic is updated in place; a new one is created by the save that follows.
+		const record = store.cosmetic(id) === null ? null : store.upsertCosmetic(patch)
+
+		console.log(
+			`[halcyon] split ${id} into ${frameTextures.length} frames of ${animation.frameMs}ms`,
+		)
+		send(response, 200, {
+			id,
+			width: animation.width,
+			height: animation.height,
+			total: animation.total,
+			frames: frameTextures.length,
+			frameMs: animation.frameMs,
+			frameTextures,
+			texture: patch.texture,
+			gif: `${COSMETIC_TEXTURE_PREFIX}/${id}.gif`,
+			cosmetic: record,
+		})
 		return true
 	}
 
