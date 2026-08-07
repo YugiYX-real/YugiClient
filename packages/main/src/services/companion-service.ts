@@ -14,9 +14,10 @@ const COMPANION_PREFIX = "halcyon-companion"
  * The companion mod is compiled against one set of Yarn mappings, and a mixin
  * that misses its target takes the whole game down before the window opens.
  * Only versions the mod was actually built and tested against are listed here;
- * everything else launches untouched.
+ * everything else launches untouched. The current jar is built against the
+ * 1.21.11 mappings, so older 1.21 builds are deliberately excluded.
  */
-const SUPPORTED_GAME_VERSIONS: readonly string[] = ["1.21", "1.21.1"]
+const SUPPORTED_GAME_VERSIONS: readonly string[] = ["1.21.11"]
 
 export type CompanionTarget = {
 	readonly id: string
