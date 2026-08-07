@@ -41,6 +41,12 @@ public final class HalcyonConfig {
 	/** Optional shared secret expected by the backend. */
 	public String backendKey = "";
 
+	/** Pull the cosmetics the owner handed out and wear the chosen one. */
+	public boolean cosmeticsEnabled = true;
+
+	/** Id of the cape picked in the Halcyon cosmetics screen, empty means none. */
+	public String equippedCape = "";
+
 	/** Replace the vanilla resource reload screen with the Halcyon one. */
 	public boolean splashEnabled = true;
 

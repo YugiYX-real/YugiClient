@@ -64,6 +64,17 @@ public final class HalcyonBackend {
 		return trimmed.isEmpty() ? null : trimmed;
 	}
 
+	/** The configured address without a trailing slash, or null when there is none. */
+	public static String baseUrl() {
+		return base();
+	}
+
+	/** The shared secret the backend expects, or an empty string. */
+	public static String clientKey() {
+		String key = HalcyonConfig.get().backendKey;
+		return key == null ? "" : key.trim();
+	}
+
 	public void tick(MinecraftClient client) {
 		String base = base();
 		if (base == null || syncing) {
@@ -95,9 +106,9 @@ public final class HalcyonBackend {
 				.timeout(Duration.ofSeconds(15))
 				.header("accept", "application/json");
 
-		String key = HalcyonConfig.get().backendKey;
-		if (key != null && !key.isBlank()) {
-			builder = builder.header("x-halcyon-key", key.trim());
+		String key = clientKey();
+		if (!key.isEmpty()) {
+			builder = builder.header("x-halcyon-key", key);
 		}
 		return builder;
 	}

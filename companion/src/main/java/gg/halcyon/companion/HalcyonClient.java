@@ -19,16 +19,24 @@ public final class HalcyonClient implements ClientModInitializer {
 	private static final KeyBinding.Category CATEGORY =
 			KeyBinding.Category.create(Identifier.of("halcyon", "controls"));
 
+	private static KeyBinding openMenu;
+
 	private static KeyBinding toggleHud;
 
 	private static KeyBinding toggleBadges;
 
 	@Override
 	public void onInitializeClient() {
+		openMenu = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+				"key.halcyon.openMenu",
+				InputUtil.Type.KEYSYM,
+				GLFW.GLFW_KEY_RIGHT_SHIFT,
+				CATEGORY));
+
 		toggleHud = KeyBindingHelper.registerKeyBinding(new KeyBinding(
 				"key.halcyon.toggleHud",
 				InputUtil.Type.KEYSYM,
-				GLFW.GLFW_KEY_RIGHT_SHIFT,
+				InputUtil.UNKNOWN_KEY.getCode(),
 				CATEGORY));
 
 		toggleBadges = KeyBindingHelper.registerKeyBinding(new KeyBinding(
@@ -50,8 +58,16 @@ public final class HalcyonClient implements ClientModInitializer {
 		}
 
 		HalcyonBackend.get().tick(client);
+		HalcyonCosmetics.get().tick(client);
 
 		HalcyonConfig config = HalcyonConfig.get();
+
+		while (openMenu.wasPressed()) {
+			if (client.currentScreen == null) {
+				HalcyonCosmetics.get().refresh(client);
+				client.setScreen(new HalcyonPanelScreen(null));
+			}
+		}
 
 		while (toggleHud.wasPressed()) {
 			config.hudEnabled = !config.hudEnabled;
