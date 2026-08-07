@@ -7,10 +7,18 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.text.Text;
+import net.minecraft.util.Identifier;
 import org.lwjgl.glfw.GLFW;
 
 /** Entrypoint for the client half of Halcyon. */
 public final class HalcyonClient implements ClientModInitializer {
+	/**
+	 * Modern Minecraft builds identify key binding categories with a dedicated type instead of a raw
+	 * translation key, so the category is created once and shared by every Halcyon binding.
+	 */
+	private static final KeyBinding.Category CATEGORY =
+			KeyBinding.Category.create(Identifier.of("halcyon", "controls"));
+
 	private static KeyBinding toggleHud;
 
 	private static KeyBinding toggleBadges;
@@ -21,13 +29,13 @@ public final class HalcyonClient implements ClientModInitializer {
 				"key.halcyon.toggleHud",
 				InputUtil.Type.KEYSYM,
 				GLFW.GLFW_KEY_RIGHT_SHIFT,
-				"key.categories.halcyon"));
+				CATEGORY));
 
 		toggleBadges = KeyBindingHelper.registerKeyBinding(new KeyBinding(
 				"key.halcyon.toggleBadges",
 				InputUtil.Type.KEYSYM,
 				InputUtil.UNKNOWN_KEY.getCode(),
-				"key.categories.halcyon"));
+				CATEGORY));
 
 		HalcyonHud.register();
 		ClientTickEvents.END_CLIENT_TICK.register(HalcyonClient::tick);
@@ -37,7 +45,7 @@ public final class HalcyonClient implements ClientModInitializer {
 
 	private static void tick(MinecraftClient client) {
 		if (client.player != null) {
-			HalcyonRoster.get().add(client.player.getGameProfile().getName());
+			HalcyonRoster.get().add(client.player.getName().getString());
 			HalcyonRoster.get().refreshIfStale();
 		}
 
