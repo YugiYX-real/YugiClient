@@ -1,5 +1,5 @@
 {
-  "tag": "v1.0.9",
-  "requestedAt": "2026-08-06T15:02:00Z",
-  "summary": "Square instance artwork in the instances grid, wrapping toolbars and tab strips so page headers can no longer be clipped or pushed off screen, and no stray horizontal scrollbars inside pages"
+  "tag": "v1.1.0",
+  "requestedAt": "2026-08-07T01:20:00Z",
+  "summary": "Square instance artwork in the instances grid, dashboard artwork for recently played instances, wrapping toolbars and tab strips so page headers can no longer be clipped, no stray horizontal scrollbars, and a release publisher that can see its own draft"
 }
