@@ -130,10 +130,12 @@ jobs:
           distribution: temurin
           java-version: "21"
 
+      # Keep this in step with companion/build.gradle: Loom 1.12 is the first
+      # line that understands Minecraft 1.21.11 and it needs Gradle 8.14.
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: "8.10"
+          gradle-version: "8.14"
 
       - name: Build the companion mod
         working-directory: companion
