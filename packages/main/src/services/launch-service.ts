@@ -10,6 +10,7 @@ import type { Logger } from "../infra/logger.ts"
 import type { AppPaths } from "../infra/paths.ts"
 import { pathExists } from "../infra/fs-extra.ts"
 import type { AuthService } from "./auth-service.ts"
+import type { CompanionService } from "./companion-service.ts"
 import type { InstanceService } from "./instance-service.ts"
 import type { JavaService } from "./java-service.ts"
 import type { LoaderService } from "./loader-service.ts"
@@ -45,6 +46,7 @@ export class LaunchService {
 	private readonly logs: LogService
 	private readonly statistics: StatisticsService
 	private readonly presence: PresenceService
+	private readonly companion: CompanionService
 	private readonly events: EventBus
 	private readonly logger: Logger
 	private readonly paths: AppPaths
@@ -62,6 +64,7 @@ export class LaunchService {
 		logs: LogService
 		statistics: StatisticsService
 		presence: PresenceService
+		companion: CompanionService
 		events: EventBus
 		logger: Logger
 		paths: AppPaths
@@ -77,6 +80,7 @@ export class LaunchService {
 		this.logs = dependencies.logs
 		this.statistics = dependencies.statistics
 		this.presence = dependencies.presence
+		this.companion = dependencies.companion
 		this.events = dependencies.events
 		this.logger = dependencies.logger
 		this.paths = dependencies.paths
@@ -160,6 +164,8 @@ export class LaunchService {
 				this.progress(instanceId, "downloading", detail, 0.1 + fraction * 0.5)
 			})
 		}
+
+		await this.prepareCompanion(instanceId, config.name, config.loader, config.gameVersion)
 
 		const version = await this.versions.resolve(launchVersionId)
 
@@ -265,6 +271,31 @@ export class LaunchService {
 
 		this.logger.info(`Launched ${config.name} as ${session.username} (pid ${child.pid ?? 0})`)
 		return { instanceId, started: true, pid: child.pid ?? null, message: null }
+	}
+
+	/**
+	 * Instances that already exist pick up the companion mod here, because this
+	 * runs on every launch rather than only when an instance is created. A
+	 * failure is never fatal: the game still starts, only without the in game
+	 * overlay and player badges.
+	 */
+	private async prepareCompanion(
+		instanceId: string,
+		name: string,
+		loader: string,
+		gameVersion: string,
+	): Promise<void> {
+		if (!this.companion.supports({ id: instanceId, name, loader, gameVersion })) {
+			return
+		}
+
+		this.progress(instanceId, "installing", "Preparing the Halcyon companion mod", 0.62)
+		try {
+			const outcome = await this.companion.ensure({ id: instanceId, name, loader, gameVersion })
+			this.logger.info(outcome.detail)
+		} catch (error) {
+			this.logger.warn(`The companion mod could not be prepared for ${name}`, error)
+		}
 	}
 
 	private async handleExit(
