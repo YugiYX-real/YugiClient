@@ -12,6 +12,12 @@ files:
   - "!**/*.map"
   - "!node_modules/**/{test,tests,__tests__,docs,example,examples}/**"
 
+extraResources:
+  - from: build/companion
+    to: companion
+    filter:
+      - "*.jar"
+
 asar: true
 npmRebuild: false
 buildDependenciesFromSource: false
