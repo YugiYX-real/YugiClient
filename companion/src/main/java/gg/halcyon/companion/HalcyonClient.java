@@ -49,6 +49,8 @@ public final class HalcyonClient implements ClientModInitializer {
 			HalcyonRoster.get().refreshIfStale();
 		}
 
+		HalcyonBackend.get().tick(client);
+
 		HalcyonConfig config = HalcyonConfig.get();
 
 		while (toggleHud.wasPressed()) {

@@ -15,31 +15,40 @@ public final class HalcyonConfig {
 
 	private static HalcyonConfig instance;
 
-	/** Draw the Halcyon badge in front of the nametag of other Halcyon players. */
+	/** Draw the Halcyon badge in front of the name of a Halcyon player. */
 	public boolean badgeEnabled = true;
 
 	/**
-	 * Badge every player instead of only roster members.
+	 * Badge every player rather than only roster members.
 	 *
-	 * <p>Useful while no roster endpoint is configured, because you never see your own nameplate and
-	 * would otherwise only see your own badge in the player list.
+	 * <p>Defaults to on because an unconfigured roster contains nobody but you, which would leave
+	 * the badge invisible everywhere except your own player list entry.
 	 */
-	public boolean badgeAllPlayers = false;
+	public boolean badgeAllPlayers = true;
 
 	/** The glyph drawn in front of the name. */
 	public String badgeText = "\u2726";
 
-	/** Badge colour as a hexadecimal RGB string. */
+	/** Badge and accent colour as a hexadecimal RGB string. */
 	public String badgeColor = "#8B7CF6";
 
-	/** Optional roster endpoint that lists the players running Halcyon. */
+	/** Optional plain roster endpoint that lists the players running Halcyon. */
 	public String rosterUrl = "";
+
+	/** Base address of the Halcyon backend, for example https://halcyon.example.com. */
+	public String backendUrl = "";
+
+	/** Optional shared secret expected by the backend. */
+	public String backendKey = "";
 
 	/** Replace the vanilla resource reload screen with the Halcyon one. */
 	public boolean splashEnabled = true;
 
-	/** Draw the Halcyon header across the top of the main menu. */
+	/** Replace the vanilla title screen with the Halcyon menu. */
 	public boolean mainMenuBranding = true;
+
+	/** Absolute path to a menu background image; empty means config/halcyon/menu-background.png. */
+	public String menuBackground = "";
 
 	/** Master switch for the on screen overlay. */
 	public boolean hudEnabled = true;

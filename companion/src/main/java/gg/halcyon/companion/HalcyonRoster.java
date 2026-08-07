@@ -17,9 +17,9 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Knows which players are running Halcyon.
  *
- * <p>Two sources feed the roster: the local player is always a member, and an optional roster
- * endpoint can publish the wider community. Everything degrades to "only me" when the endpoint is
- * unset or unreachable, so the mod never blocks the game.
+ * <p>Three sources feed the roster: the local player is always a member, the Halcyon backend
+ * publishes everybody currently online, and a plain roster url can be used instead. Everything
+ * degrades to "only me" when nothing is reachable, so the mod never blocks the game.
  */
 public final class HalcyonRoster {
 	private static final HalcyonRoster INSTANCE = new HalcyonRoster();
@@ -47,18 +47,38 @@ public final class HalcyonRoster {
 		}
 	}
 
+	public int size() {
+		return members.size();
+	}
+
+	/**
+	 * Player list entries carry team prefixes and suffixes, so an exact match is not enough; every
+	 * word of the label is checked against the roster as well.
+	 */
 	public boolean isMember(String name) {
 		if (name == null || name.isBlank()) {
 			return false;
 		}
-		return members.contains(normalise(name));
+
+		String normalised = normalise(name);
+		if (members.contains(normalised)) {
+			return true;
+		}
+
+		for (String token : normalised.split("[^a-z0-9_]+")) {
+			if (!token.isEmpty() && members.contains(token)) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	private static String normalise(String name) {
 		return name.trim().toLowerCase(Locale.ROOT);
 	}
 
-	/** Refreshes from the roster endpoint at most once every five minutes. */
+	/** Refreshes from the plain roster endpoint at most once every five minutes. */
 	public void refreshIfStale() {
 		String endpoint = HalcyonConfig.get().rosterUrl;
 		if (endpoint == null || endpoint.isBlank() || refreshing) {
@@ -101,7 +121,7 @@ public final class HalcyonRoster {
 	}
 
 	/** Accepts either a bare array of names or objects carrying a name field. */
-	private void ingest(String body) {
+	public void ingest(String body) {
 		try {
 			JsonElement root = JsonParser.parseString(body);
 			JsonArray entries;
