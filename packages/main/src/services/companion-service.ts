@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readdir, stat } from "node:fs/promises"
+import { copyFile, mkdir, readdir, rm, stat } from "node:fs/promises"
 import { join } from "node:path"
 import { pathExists } from "../infra/fs-extra.ts"
 import type { HttpClient } from "../infra/http.ts"
@@ -131,7 +131,6 @@ export class CompanionService {
 	 * mods that share an id, so they are cleared out first.
 	 */
 	private async removeSupersededCopies(modsDirectory: string): Promise<void> {
-		const { rm } = await import("node:fs/promises")
 		for (const name of await this.listEntries(modsDirectory)) {
 			const lower = name.toLowerCase()
 			if (!lower.startsWith(COMPANION_PREFIX) || !lower.endsWith(".jar")) {
