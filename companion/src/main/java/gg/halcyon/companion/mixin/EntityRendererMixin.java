@@ -1,22 +1,41 @@
 package gg.halcyon.companion.mixin;
 
 import gg.halcyon.companion.HalcyonBadge;
+import net.minecraft.client.render.command.OrderedRenderCommandQueue;
 import net.minecraft.client.render.entity.EntityRenderer;
+import net.minecraft.client.render.entity.state.EntityRenderState;
+import net.minecraft.client.render.state.CameraRenderState;
+import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.text.Text;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.ModifyVariable;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * Rewrites the label an entity renderer is about to draw.
+ * Prefixes the Halcyon badge onto player nameplates.
  *
- * <p>Only the text argument is touched, so the mixin stays compatible with the different label
- * signatures Mojang has shipped across 1.21 builds.
+ * <p>Since 1.21.11 the label text is no longer passed to the renderer as an argument; it is carried
+ * on the render state, which the game rebuilds from the entity every frame. Decorating the state at
+ * the head of the draw call therefore cannot accumulate badges over time.
  */
 @Mixin(EntityRenderer.class)
 public abstract class EntityRendererMixin {
-	@ModifyVariable(method = "renderLabelIfPresent", at = @At("HEAD"), argsOnly = true, index = 2)
-	private Text halcyon$decorateLabel(Text label) {
-		return HalcyonBadge.decorate(label);
+	@Inject(method = "renderLabelIfPresent", at = @At("HEAD"))
+	private void halcyon$decorateLabel(
+			EntityRenderState state,
+			MatrixStack matrices,
+			OrderedRenderCommandQueue queue,
+			CameraRenderState cameraRenderState,
+			CallbackInfo info) {
+		Text label = state.displayName;
+		if (label == null) {
+			return;
+		}
+
+		Text decorated = HalcyonBadge.decorate(label);
+		if (decorated != label) {
+			state.displayName = decorated;
+		}
 	}
 }

@@ -4,6 +4,6 @@
   "compatibilityLevel": "JAVA_21",
   "client": ["EntityRendererMixin"],
   "injectors": {
-    "defaultRequire": 1
+    "defaultRequire": 0
   }
 }
