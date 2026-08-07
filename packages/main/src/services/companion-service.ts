@@ -9,7 +9,14 @@ const MODRINTH_API = "https://api.modrinth.com/v2"
 const FABRIC_API_PROJECT = "fabric-api"
 const COMPANION_FILE_NAME = "halcyon-companion.jar"
 const COMPANION_PREFIX = "halcyon-companion"
-const SUPPORTED_GAME_VERSION = "1.21"
+
+/**
+ * The companion mod is compiled against one set of Yarn mappings, and a mixin
+ * that misses its target takes the whole game down before the window opens.
+ * Only versions the mod was actually built and tested against are listed here;
+ * everything else launches untouched.
+ */
+const SUPPORTED_GAME_VERSIONS: readonly string[] = ["1.21", "1.21.1"]
 
 export type CompanionTarget = {
 	readonly id: string
@@ -57,19 +64,32 @@ export class CompanionService {
 	}
 
 	supports(target: CompanionTarget): boolean {
-		return target.loader === "fabric" && target.gameVersion.startsWith(SUPPORTED_GAME_VERSION)
+		return target.loader === "fabric" && SUPPORTED_GAME_VERSIONS.includes(target.gameVersion)
 	}
 
+	/**
+	 * Runs for every launch, including unsupported instances, because an
+	 * instance that was moved to a newer game version must lose the mod again
+	 * rather than crash on a mixin that no longer matches.
+	 */
 	async ensure(target: CompanionTarget): Promise<CompanionOutcome> {
+		const modsDirectory = join(this.instances.gameDirectory(target.id), "mods")
+
 		if (!this.supports(target)) {
+			const removed = await this.removeCompanionJars(modsDirectory, null)
+			const suffix = removed ? ", so the installed copy was removed" : ""
 			return {
 				installed: false,
 				detail:
-					"The in game companion needs a Fabric " +
-					SUPPORTED_GAME_VERSION +
-					".x instance, so " +
+					"The in game companion supports Fabric " +
+					SUPPORTED_GAME_VERSIONS.join(" and ") +
+					" but " +
 					target.name +
-					" starts without it",
+					" runs " +
+					target.loader +
+					" " +
+					target.gameVersion +
+					suffix,
 			}
 		}
 
@@ -81,7 +101,6 @@ export class CompanionService {
 			}
 		}
 
-		const modsDirectory = join(this.instances.gameDirectory(target.id), "mods")
 		await mkdir(modsDirectory, { recursive: true })
 
 		if (await pathExists(join(modsDirectory, COMPANION_FILE_NAME + ".disabled"))) {
@@ -91,7 +110,7 @@ export class CompanionService {
 			}
 		}
 
-		await this.removeSupersededCopies(modsDirectory)
+		await this.removeCompanionJars(modsDirectory, COMPANION_FILE_NAME)
 		const refreshed = await this.copyWhenChanged(source, join(modsDirectory, COMPANION_FILE_NAME))
 
 		let api = ""
@@ -126,22 +145,28 @@ export class CompanionService {
 	}
 
 	/**
-	 * Earlier builds copied the jar under its versioned file name. Those copies
-	 * would load alongside the current one and Fabric refuses to start with two
-	 * mods that share an id, so they are cleared out first.
+	 * Clears companion jars out of an instance, optionally keeping the one file
+	 * that is about to be refreshed. Two jars carrying the same mod id stop
+	 * Fabric from starting at all, so leftovers are never acceptable.
 	 */
-	private async removeSupersededCopies(modsDirectory: string): Promise<void> {
+	private async removeCompanionJars(
+		modsDirectory: string,
+		keep: string | null,
+	): Promise<boolean> {
+		let removed = false
 		for (const name of await this.listEntries(modsDirectory)) {
 			const lower = name.toLowerCase()
 			if (!lower.startsWith(COMPANION_PREFIX) || !lower.endsWith(".jar")) {
 				continue
 			}
-			if (name === COMPANION_FILE_NAME) {
+			if (keep !== null && name === keep) {
 				continue
 			}
 			await rm(join(modsDirectory, name), { force: true })
-			this.logger.info("Removed the superseded companion jar " + name)
+			this.logger.info("Removed the companion jar " + name)
+			removed = true
 		}
+		return removed
 	}
 
 	private async ensureFabricApi(modsDirectory: string, gameVersion: string): Promise<boolean> {
