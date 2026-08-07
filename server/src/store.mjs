@@ -13,15 +13,71 @@ const PERSIST_DELAY_MS = 2000
 // Cosmetic ids end up in urls and file names, so they are kept to a short lowercase slug.
 const COSMETIC_ID = /^[a-z0-9][a-z0-9_-]{0,47}$/
 
+/**
+ * Every kind of cosmetic the client knows how to wear.
+ *
+ * A slot is what actually decides what replaces what: capes and wings both hang off the back, so
+ * wearing wings takes the cape off rather than drawing both through each other. Adding a new kind
+ * of cosmetic later is a line in this table and nothing else.
+ */
+export const COSMETIC_TYPES = {
+	cape: { slot: "back", label: "Cape" },
+	wings: { slot: "back", label: "Wings" },
+	backpack: { slot: "back", label: "Backpack" },
+	hat: { slot: "head", label: "Hat" },
+	halo: { slot: "halo", label: "Halo" },
+	mask: { slot: "face", label: "Mask" },
+	shoulder: { slot: "shoulder", label: "Shoulder buddy" },
+	aura: { slot: "aura", label: "Aura" },
+	trail: { slot: "trail", label: "Trail" },
+}
+
+export const COSMETIC_SLOTS = Array.from(
+	new Set(Object.values(COSMETIC_TYPES).map((entry) => entry.slot)),
+)
+
+const RARITIES = ["common", "uncommon", "rare", "epic", "legendary", "exclusive"]
+
 /** Returns the cleaned cosmetic id, or an empty string when the value cannot be used. */
 export function normaliseCosmeticId(value) {
 	const text = typeof value === "string" ? value.trim().toLowerCase() : ""
 	return COSMETIC_ID.test(text) ? text : ""
 }
 
+/** Falls back to a cape, because that is what every older record was. */
+export function normaliseCosmeticType(value) {
+	const text = typeof value === "string" ? value.trim().toLowerCase() : ""
+	return COSMETIC_TYPES[text] === undefined ? "cape" : text
+}
+
+export function slotOf(type) {
+	return COSMETIC_TYPES[normaliseCosmeticType(type)].slot
+}
+
+function normaliseRarity(value) {
+	const text = typeof value === "string" ? value.trim().toLowerCase() : ""
+	return RARITIES.includes(text) ? text : "common"
+}
+
+function clamp(value, low, high, fallback) {
+	const number = typeof value === "number" ? value : Number.parseInt(String(value ?? ""), 10)
+	if (!Number.isFinite(number)) {
+		return fallback
+	}
+	return Math.min(high, Math.max(low, Math.round(number)))
+}
+
 /** Players are addressed case insensitively everywhere. */
 export function playerKey(name) {
 	return typeof name === "string" ? name.trim().toLowerCase() : ""
+}
+
+function emptyEquipped() {
+	const equipped = {}
+	for (const slot of COSMETIC_SLOTS) {
+		equipped[slot] = null
+	}
+	return equipped
 }
 
 /**
@@ -36,6 +92,7 @@ export class Store {
 		this.presenceTtlMs = presenceTtlMs
 		this.timer = null
 		this.state = this.read()
+		this.migrate()
 	}
 
 	read() {
@@ -48,6 +105,7 @@ export class Store {
 					announcements: Array.isArray(parsed.announcements) ? parsed.announcements : [],
 					cosmetics: parsed.cosmetics ?? {},
 					profiles: parsed.profiles ?? {},
+					release: parsed.release ?? null,
 				}
 			}
 		} catch (error) {
@@ -60,6 +118,35 @@ export class Store {
 			announcements: [],
 			cosmetics: {},
 			profiles: {},
+			release: null,
+		}
+	}
+
+	/**
+	 * Brings records written by older builds up to the current shape, so a server that has been
+	 * running since before wings existed keeps every cape and every grant it already had.
+	 */
+	migrate() {
+		let touched = false
+
+		for (const [id, record] of Object.entries(this.state.cosmetics)) {
+			if (record.slot === undefined || record.animated === undefined) {
+				this.state.cosmetics[id] = this.shapeCosmetic(id, record, record)
+				touched = true
+			}
+		}
+
+		for (const profile of Object.values(this.state.profiles)) {
+			const equipped = profile.equipped ?? {}
+			if (equipped.back === undefined) {
+				// The old shape only ever had a cape, and a cape lives on the back.
+				profile.equipped = { ...emptyEquipped(), back: equipped.cape ?? null }
+				touched = true
+			}
+		}
+
+		if (touched) {
+			this.schedulePersist()
 		}
 	}
 
@@ -156,15 +243,62 @@ export class Store {
 		return this.state.announcements
 	}
 
-	/** Every cosmetic the owner published, sorted by name. */
+	/** What the launcher is told to update to, or null while nothing has been published. */
+	release() {
+		return this.state.release
+	}
+
+	publishRelease(entry) {
+		this.state.release = {
+			version: String(entry.version ?? "").trim(),
+			notes: typeof entry.notes === "string" ? entry.notes : "",
+			files: Array.isArray(entry.files) ? entry.files : [],
+			publishedAt: new Date().toISOString(),
+		}
+		this.schedulePersist()
+		return this.state.release
+	}
+
+	/** Every cosmetic the owner published, sorted by kind and then by name. */
 	cosmetics() {
-		return Object.values(this.state.cosmetics).sort((left, right) =>
-			String(left.name).localeCompare(String(right.name)),
+		return Object.values(this.state.cosmetics).sort(
+			(left, right) =>
+				String(left.type).localeCompare(String(right.type)) ||
+				String(left.name).localeCompare(String(right.name)),
 		)
 	}
 
 	cosmetic(id) {
 		return this.state.cosmetics[normaliseCosmeticId(id)] ?? null
+	}
+
+	/** Builds the stored shape of one cosmetic from whatever the panel sent. */
+	shapeCosmetic(id, entry, existing) {
+		const type = normaliseCosmeticType(entry.type ?? existing.type)
+		const animated =
+			typeof entry.animated === "boolean" ? entry.animated : (existing.animated ?? false)
+		const frames = clamp(entry.frames ?? existing.frames, 1, 64, 1)
+
+		return {
+			id,
+			type,
+			slot: slotOf(type),
+			name: typeof entry.name === "string" ? entry.name : (existing.name ?? id),
+			description:
+				typeof entry.description === "string"
+					? entry.description
+					: (existing.description ?? ""),
+			rarity: normaliseRarity(entry.rarity ?? existing.rarity),
+			texture:
+				typeof entry.texture === "string" && entry.texture.trim() !== ""
+					? entry.texture.trim()
+					: (existing.texture ?? `/v1/cosmetics/textures/${id}.png`),
+			// An animated texture is one tall strip of frames, played top to bottom on a loop.
+			animated: animated && frames > 1,
+			frames: animated ? Math.max(2, frames) : 1,
+			frameMs: clamp(entry.frameMs ?? existing.frameMs, 20, 5000, 100),
+			createdAt: existing.createdAt ?? new Date().toISOString(),
+		}
 	}
 
 	/**
@@ -178,21 +312,7 @@ export class Store {
 		}
 
 		const existing = this.state.cosmetics[id] ?? {}
-		const record = {
-			id,
-			type: "cape",
-			name: typeof entry.name === "string" ? entry.name : (existing.name ?? id),
-			description:
-				typeof entry.description === "string"
-					? entry.description
-					: (existing.description ?? ""),
-			rarity: typeof entry.rarity === "string" ? entry.rarity : (existing.rarity ?? "common"),
-			texture:
-				typeof entry.texture === "string" && entry.texture.trim() !== ""
-					? entry.texture.trim()
-					: (existing.texture ?? `/v1/cosmetics/textures/${id}.png`),
-			createdAt: existing.createdAt ?? new Date().toISOString(),
-		}
+		const record = this.shapeCosmetic(id, entry, existing)
 
 		this.state.cosmetics[id] = record
 		this.schedulePersist()
@@ -210,8 +330,10 @@ export class Store {
 
 		for (const profile of Object.values(this.state.profiles)) {
 			profile.owned = (profile.owned ?? []).filter((owned) => owned !== key)
-			if (profile.equipped?.cape === key) {
-				profile.equipped.cape = null
+			for (const [slot, worn] of Object.entries(profile.equipped ?? {})) {
+				if (worn === key) {
+					profile.equipped[slot] = null
+				}
 			}
 		}
 
@@ -224,13 +346,31 @@ export class Store {
 		const key = playerKey(name)
 		const stored = this.state.profiles[key] ?? {}
 		const owned = (stored.owned ?? []).filter((id) => this.state.cosmetics[id] !== undefined)
-		const cape = stored.equipped?.cape ?? null
+		const equipped = emptyEquipped()
+
+		for (const [slot, worn] of Object.entries(stored.equipped ?? {})) {
+			if (equipped[slot] !== undefined && typeof worn === "string" && owned.includes(worn)) {
+				equipped[slot] = worn
+			}
+		}
 
 		return {
 			name: stored.name ?? String(name).trim(),
 			owned,
-			equipped: { cape: owned.includes(cape) ? cape : null },
+			equipped,
+			// Older clients only ever looked at this one field.
+			cape: equipped.back,
 		}
+	}
+
+	ensureProfile(name) {
+		const key = playerKey(name)
+		const stored = this.state.profiles[key] ?? { owned: [], equipped: emptyEquipped() }
+		stored.name = String(name).trim()
+		stored.owned = stored.owned ?? []
+		stored.equipped = { ...emptyEquipped(), ...(stored.equipped ?? {}) }
+		this.state.profiles[key] = stored
+		return stored
 	}
 
 	grant(name, id) {
@@ -240,15 +380,8 @@ export class Store {
 			return null
 		}
 
-		const stored = this.state.profiles[key] ?? {
-			name: String(name).trim(),
-			owned: [],
-			equipped: {},
-		}
-		stored.name = String(name).trim()
-		stored.owned = Array.from(new Set([...(stored.owned ?? []), cosmetic]))
-		stored.equipped = stored.equipped ?? {}
-		this.state.profiles[key] = stored
+		const stored = this.ensureProfile(name)
+		stored.owned = Array.from(new Set([...stored.owned, cosmetic]))
 
 		this.schedulePersist()
 		return this.profile(name)
@@ -263,8 +396,10 @@ export class Store {
 		}
 
 		stored.owned = (stored.owned ?? []).filter((owned) => owned !== cosmetic)
-		if (stored.equipped?.cape === cosmetic) {
-			stored.equipped.cape = null
+		for (const [slot, worn] of Object.entries(stored.equipped ?? {})) {
+			if (worn === cosmetic) {
+				stored.equipped[slot] = null
+			}
 		}
 
 		this.schedulePersist()
@@ -272,46 +407,55 @@ export class Store {
 	}
 
 	/**
-	 * Puts a cape on, or takes it off when the id is null. Returns null when the player does not own
-	 * the cosmetic, so a patched client cannot wear something it was never given.
+	 * Puts a cosmetic on, or takes the slot off when the id is null. Returns null when the player
+	 * does not own the cosmetic, so a patched client cannot wear something it was never given.
 	 */
-	equip(name, id) {
+	equip(name, id, slot) {
 		const key = playerKey(name)
 		if (key === "") {
 			return null
 		}
 
-		const stored = this.state.profiles[key] ?? {
-			name: String(name).trim(),
-			owned: [],
-			equipped: {},
-		}
-		stored.name = String(name).trim()
-		stored.owned = stored.owned ?? []
-		stored.equipped = stored.equipped ?? {}
+		const stored = this.ensureProfile(name)
 
 		if (id === null) {
-			stored.equipped.cape = null
-		} else {
-			const cosmetic = normaliseCosmeticId(id)
-			if (cosmetic === "" || !stored.owned.includes(cosmetic)) {
-				return null
-			}
-			stored.equipped.cape = cosmetic
+			// No slot named means the caller is an older client, which only knew about capes.
+			const target = COSMETIC_SLOTS.includes(slot) ? slot : "back"
+			stored.equipped[target] = null
+			this.schedulePersist()
+			return this.profile(name)
 		}
 
-		this.state.profiles[key] = stored
+		const cosmetic = normaliseCosmeticId(id)
+		const record = this.state.cosmetics[cosmetic] ?? null
+		if (record === null || !stored.owned.includes(cosmetic)) {
+			return null
+		}
+
+		stored.equipped[record.slot ?? slotOf(record.type)] = cosmetic
 		this.schedulePersist()
 		return this.profile(name)
 	}
 
-	/** The cape every online player is wearing, so other clients can draw it. */
-	wornCapes() {
+	/** Everything every online player is wearing, so other clients can draw it. */
+	worn() {
 		const worn = {}
 		for (const player of this.onlinePlayers()) {
 			const profile = this.profile(player.name)
-			if (profile.equipped.cape !== null) {
-				worn[player.name] = profile.equipped.cape
+			const dressed = Object.entries(profile.equipped).filter(([, id]) => id !== null)
+			if (dressed.length > 0) {
+				worn[player.name] = Object.fromEntries(dressed)
+			}
+		}
+		return worn
+	}
+
+	/** The cape every online player is wearing, kept for clients built before slots existed. */
+	wornCapes() {
+		const worn = {}
+		for (const [name, slots] of Object.entries(this.worn())) {
+			if (typeof slots.back === "string") {
+				worn[name] = slots.back
 			}
 		}
 		return worn
