@@ -1,4 +1,4 @@
 {
-  "requestedAt": "2026-08-06T18:25:00Z",
-  "reason": "First run on the self hosted Windows runner: proves the runner picks up jobs, the node API reporter replaces the gh cli, and the dashboard artwork and tab strip fixes still verify"
+  "requestedAt": "2026-08-07T15:45:00Z",
+  "reason": "Typecheck the generic update feed wiring in UpdateService and lint the backend update endpoints and the publish-backend script"
 }
