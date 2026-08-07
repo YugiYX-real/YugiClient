@@ -11,6 +11,7 @@ import { InstanceDetailPage } from "../pages/InstanceDetailPage.tsx"
 import { DiscoverPage } from "../pages/DiscoverPage.tsx"
 import { AccountsPage } from "../pages/AccountsPage.tsx"
 import { SkinsPage } from "../pages/SkinsPage.tsx"
+import { CosmeticsPage } from "../pages/CosmeticsPage.tsx"
 import { JavaPage } from "../pages/JavaPage.tsx"
 import { DownloadsPage } from "../pages/DownloadsPage.tsx"
 import { LogsPage } from "../pages/LogsPage.tsx"
@@ -166,6 +167,14 @@ export function App(): JSX.Element {
 				icon: "skins",
 				run: () => {
 					navigate("skins")
+				},
+			},
+			{
+				id: "action-open-cosmetics",
+				label: "Open your Halcyon cosmetics",
+				icon: "sparkle",
+				run: () => {
+					navigate("cosmetics")
 				},
 			},
 			{
@@ -331,6 +340,7 @@ export function App(): JSX.Element {
 						/>
 					) : null}
 					{route === "skins" ? <SkinsPage /> : null}
+					{route === "cosmetics" ? <CosmeticsPage /> : null}
 					{route === "java" ? <JavaPage /> : null}
 					{route === "downloads" ? <DownloadsPage /> : null}
 					{route === "logs" ? <LogsPage /> : null}
