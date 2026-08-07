@@ -1,11 +1,11 @@
 import { createServer } from "node:http"
 import { createReadStream, createWriteStream } from "node:fs"
-import { mkdir, readdir, rename, stat, unlink } from "node:fs/promises"
+import { mkdir, readdir, rename, stat, unlink, writeFile } from "node:fs/promises"
 import { dirname, extname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { pipeline } from "node:stream/promises"
 
-import { Store, normaliseCosmeticId } from "./store.mjs"
+import { COSMETIC_SLOTS, COSMETIC_TYPES, Store, normaliseCosmeticId } from "./store.mjs"
 import { Accounts } from "./accounts.mjs"
 import { minecraftProfile } from "./minecraft.mjs"
 import { serveSite } from "./site.mjs"
@@ -47,6 +47,8 @@ const SESSION_COOKIE = "halcyon_session"
 
 const SAFE_FILE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
 const PLAYER_NAME = /^[A-Za-z0-9_]{1,32}$/
+const VERSION = /^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/
+const BASE64 = /^[A-Za-z0-9+/=]{16,256}$/
 const CONTENT_TYPES = {
 	".yml": "text/yaml; charset=utf-8",
 	".yaml": "text/yaml; charset=utf-8",
@@ -380,6 +382,60 @@ function validName(value) {
 	return PLAYER_NAME.test(name) ? name : ""
 }
 
+/**
+ * Which update feed an installer belongs in. The launcher asks for one of these three names
+ * depending on the machine it runs on, so a Windows installer must not end up in the Linux feed.
+ */
+function feedFor(name) {
+	const lower = name.toLowerCase()
+	if (lower.endsWith(".dmg") || (lower.endsWith(".zip") && lower.includes("mac"))) {
+		return "latest-mac.yml"
+	}
+	if (
+		lower.endsWith(".appimage") ||
+		lower.endsWith(".deb") ||
+		lower.endsWith(".rpm") ||
+		lower.endsWith(".tar.gz")
+	) {
+		return "latest-linux.yml"
+	}
+	return "latest.yml"
+}
+
+/**
+ * Writes the little yaml files the launcher polls.
+ *
+ * The panel uploads the installer and works out its sha512 in the browser, so all that is left
+ * here is describing what was uploaded in the shape the updater expects.
+ */
+async function writeFeeds(version, files, releaseDate) {
+	const grouped = new Map()
+	for (const file of files) {
+		const feed = feedFor(file.name)
+		grouped.set(feed, [...(grouped.get(feed) ?? []), file])
+	}
+
+	await mkdir(UPDATE_DIR, { recursive: true })
+	const written = []
+
+	for (const [feed, entries] of grouped) {
+		const first = entries[0]
+		const lines = [`version: ${version}`, "files:"]
+		for (const entry of entries) {
+			lines.push(`  - url: ${entry.name}`)
+			lines.push(`    sha512: ${entry.sha512}`)
+			lines.push(`    size: ${entry.size}`)
+		}
+		lines.push(`path: ${first.name}`)
+		lines.push(`sha512: ${first.sha512}`)
+		lines.push(`releaseDate: '${releaseDate}'`)
+		await writeFile(join(UPDATE_DIR, feed), `${lines.join("\n")}\n`, "utf8")
+		written.push(feed)
+	}
+
+	return written
+}
+
 /** The numbers the website shows. Cheap enough to compute on every request. */
 function statistics() {
 	const online = store.onlinePlayers()
@@ -394,13 +450,14 @@ function statistics() {
 		cosmetics: store.cosmetics().length,
 		capesWorn: Object.keys(worn).length,
 		playersWithCosmetics: profiles.filter((profile) => (profile.owned ?? []).length > 0).length,
+		version: store.release()?.version ?? "",
 		uptimeSeconds: Math.round((Date.now() - startedAt) / 1000),
 	}
 }
 
 /**
  * Everything a signed in person is shown about themselves, in one payload: the account, the in
- * game profile behind it, the capes they own and whatever is being announced.
+ * game profile behind it, the cosmetics they own and whatever is being announced.
  */
 function overviewFor(user) {
 	const linked = String(user.minecraft ?? "")
@@ -655,7 +712,7 @@ async function handleAdmin(request, response, path) {
 			.map((profile) => ({
 				name: profile.name,
 				owned: profile.owned ?? [],
-				equipped: profile.equipped?.cape ?? null,
+				equipped: profile.equipped ?? {},
 			}))
 			.sort((left, right) => left.name.localeCompare(right.name))
 
@@ -663,10 +720,14 @@ async function handleAdmin(request, response, path) {
 			stats: statistics(),
 			accounts: accounts.list(),
 			cosmetics: store.cosmetics(),
+			types: COSMETIC_TYPES,
+			slots: COSMETIC_SLOTS,
 			grants,
 			announcements: store.announcements(),
 			branding: store.branding(),
 			players: store.onlinePlayers(),
+			release: store.release(),
+			updates: await listFiles(UPDATE_DIR),
 		})
 		return true
 	}
@@ -707,11 +768,107 @@ async function handleAdmin(request, response, path) {
 	return true
 }
 
+async function handleUpdates(request, response, path) {
+	const route = `${request.method} ${path}`
+
+	if (route === `GET ${UPDATE_PREFIX}` || route === `HEAD ${UPDATE_PREFIX}`) {
+		send(response, 200, {
+			feed: `${UPDATE_PREFIX}/latest.yml`,
+			release: store.release(),
+			files: await listFiles(UPDATE_DIR),
+		})
+		return true
+	}
+
+	if (route === `GET ${UPDATE_PREFIX}/status`) {
+		const release = store.release()
+		send(response, 200, {
+			published: release !== null,
+			release,
+			files: await listFiles(UPDATE_DIR),
+		})
+		return true
+	}
+
+	/**
+	 * Publishes a version.
+	 *
+	 * The installers themselves are uploaded first, one PUT each, and this call is what makes them
+	 * the version every launcher will offer. Checksums are worked out by whoever uploaded the file
+	 * rather than here, so publishing costs the server nothing even for a large installer.
+	 */
+	if (route === `POST ${UPDATE_PREFIX}/publish`) {
+		if (!requireAdmin(request, response)) {
+			return true
+		}
+
+		const payload = await readJson(request)
+		if (payload === null) {
+			send(response, 400, { error: "the body is not valid json" })
+			return true
+		}
+
+		const version = String(payload.version ?? "")
+			.trim()
+			.replace(/^v/, "")
+		if (!VERSION.test(version)) {
+			send(response, 400, { error: "a version like 1.2.5 is required" })
+			return true
+		}
+
+		const wanted = Array.isArray(payload.files) ? payload.files : []
+		const files = []
+		for (const entry of wanted) {
+			const name = typeof entry?.name === "string" ? entry.name.trim() : ""
+			const sha512 = typeof entry?.sha512 === "string" ? entry.sha512.trim() : ""
+			const size = Number(entry?.size)
+			if (!SAFE_FILE_NAME.test(name) || !BASE64.test(sha512) || !Number.isFinite(size)) {
+				send(response, 400, { error: `${name} is missing a name, checksum or size` })
+				return true
+			}
+
+			try {
+				const info = await stat(join(UPDATE_DIR, name))
+				if (info.size !== Math.round(size)) {
+					send(response, 409, {
+						error: `${name} on the server is a different size, upload it again`,
+					})
+					return true
+				}
+			} catch {
+				send(response, 404, { error: `${name} has not been uploaded yet` })
+				return true
+			}
+
+			files.push({ name, sha512, size: Math.round(size) })
+		}
+
+		if (files.length === 0) {
+			send(response, 400, { error: "at least one installer is required" })
+			return true
+		}
+
+		const releaseDate = new Date().toISOString()
+		const feeds = await writeFeeds(version, files, releaseDate)
+		const release = store.publishRelease({ version, notes: payload.notes, files })
+		console.log(`[halcyon] published ${version} across ${feeds.join(", ")}`)
+		send(response, 200, { release, feeds })
+		return true
+	}
+
+	return handleFiles(request, response, path, UPDATE_PREFIX, UPDATE_DIR)
+}
+
 async function handleCosmetics(request, response, path) {
 	const route = `${request.method} ${path}`
 
 	if (route === `GET ${COSMETIC_PREFIX}`) {
-		send(response, 200, { cosmetics: store.cosmetics() })
+		send(response, 200, { cosmetics: store.cosmetics(), types: COSMETIC_TYPES })
+		return true
+	}
+
+	if (route === `GET ${COSMETIC_PREFIX}/types`) {
+		send(response, 200, { types: COSMETIC_TYPES, slots: COSMETIC_SLOTS })
 		return true
 	}
 
@@ -748,14 +905,16 @@ async function handleCosmetics(request, response, path) {
 	}
 
 	if (route === `GET ${COSMETIC_PREFIX}/worn`) {
-		send(response, 200, { players: store.wornCapes() })
+		// players is the old cape only shape, worn is every slot.
+		send(response, 200, { players: store.wornCapes(), worn: store.worn() })
 		return true
 	}
 
 	/**
-	 * Equipping happens two ways: the mod sends the client key, or a signed in player picks a cape
-	 * in the launcher and the session speaks for them. A session may only dress its own linked
-	 * account, which is what stops one player wearing another player's grant.
+	 * Equipping happens three ways: the mod sends the client key, a signed in player picks a
+	 * cosmetic in the launcher and the session speaks for them, or the launcher sends the very
+	 * Minecraft token it plays with and Mojang says who that is. The last one is what makes the
+	 * wardrobe work on a fresh install, where there is no website account yet.
 	 */
 	if (route === `POST ${COSMETIC_PREFIX}/equip`) {
 		const payload = await readJson(request)
@@ -764,7 +923,21 @@ async function handleCosmetics(request, response, path) {
 			return true
 		}
 
-		const name = validName(payload.name)
+		let name = validName(payload.name)
+		let proven = false
+
+		if (typeof payload.accessToken === "string" && payload.accessToken.trim() !== "") {
+			const profile = await minecraftProfile(payload.accessToken)
+			if (profile === null) {
+				send(response, 401, {
+					error: "Minecraft did not accept that session, sign in again in the launcher",
+				})
+				return true
+			}
+			name = validName(profile.name)
+			proven = true
+		}
+
 		if (name === "") {
 			send(response, 400, { error: "a player name is required" })
 			return true
@@ -773,7 +946,7 @@ async function handleCosmetics(request, response, path) {
 		const user = currentUser(request)
 		const owns =
 			user !== null && String(user.minecraft ?? "").toLowerCase() === name.toLowerCase()
-		if (!clientAllowed(request) && !owns) {
+		if (!proven && !owns && !clientAllowed(request)) {
 			send(response, 401, { error: "the client key is missing or wrong" })
 			return true
 		}
@@ -782,7 +955,8 @@ async function handleCosmetics(request, response, path) {
 			payload.id === null || payload.id === undefined || payload.id === ""
 				? null
 				: normaliseCosmeticId(payload.id)
-		const profile = store.equip(name, wanted)
+		const slot = typeof payload.slot === "string" ? payload.slot : ""
+		const profile = store.equip(name, wanted, slot)
 		if (profile === null) {
 			send(response, 409, { error: "that cosmetic was never given to this player" })
 			return true
@@ -836,10 +1010,16 @@ async function handleCosmetics(request, response, path) {
 			return true
 		}
 
-		// The launcher wardrobe wants the whole cape record, not only its id.
+		// The wardrobe wants whole records, not only ids, and it wants the catalogue too so it can
+		// show what there is left to earn.
 		const profile = store.profile(name)
 		const owned = (profile?.owned ?? []).map((id) => store.cosmetic(id)).filter(Boolean)
-		send(response, 200, { ...profile, cosmetics: owned })
+		send(response, 200, {
+			...profile,
+			cosmetics: owned,
+			catalogue: store.cosmetics(),
+			types: COSMETIC_TYPES,
+		})
 		return true
 	}
 
@@ -983,16 +1163,10 @@ async function handle(request, response, path) {
 		return
 	}
 
-	if (path === UPDATE_PREFIX && (request.method === "GET" || request.method === "HEAD")) {
-		send(response, 200, {
-			feed: `${UPDATE_PREFIX}/latest.yml`,
-			files: await listFiles(UPDATE_DIR),
-		})
-		return
-	}
-
-	if (await handleFiles(request, response, path, UPDATE_PREFIX, UPDATE_DIR)) {
-		return
+	if (path === UPDATE_PREFIX || path.startsWith(`${UPDATE_PREFIX}/`)) {
+		if (await handleUpdates(request, response, path)) {
+			return
+		}
 	}
 
 	if (await handleCosmetics(request, response, path)) {
