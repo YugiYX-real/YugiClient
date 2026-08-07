@@ -1,5 +1,7 @@
 plugins {
-	id 'fabric-loom' version '1.12-SNAPSHOT'
+	// Fabric API 0.141.x for 1.21.11 is published with Loom 1.13.3, so Loom must
+	// be at least that version. 1.13-SNAPSHOT resolves to 1.13.6.
+	id 'fabric-loom' version '1.13-SNAPSHOT'
 }
 
 version = project.mod_version
