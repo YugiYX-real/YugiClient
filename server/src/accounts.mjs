@@ -5,6 +5,7 @@ import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypt
 const USERNAME = /^[A-Za-z0-9_]{3,20}$/
 const EMAIL = /^[^@\s]+@[^@\s.]+\.[^@\s]{2,}$/
 const MINECRAFT_NAME = /^[A-Za-z0-9_]{1,32}$/
+const MINECRAFT_UUID = /^[0-9a-f]{32}$/
 
 const PASSWORD_MIN = 8
 const PASSWORD_MAX = 200
@@ -21,7 +22,7 @@ export function hashPassword(password) {
 
 /** Constant time comparison, so a wrong password cannot be found one byte at a time. */
 export function verifyPassword(password, stored) {
-	if (typeof stored !== "string") {
+	if (typeof stored !== "string" || stored === "") {
 		return false
 	}
 
@@ -42,6 +43,14 @@ export function verifyPassword(password, stored) {
 /** Session tokens are stored hashed, so a stolen accounts file cannot be replayed as a login. */
 function tokenKey(token) {
 	return createHash("sha256").update(String(token)).digest("hex")
+}
+
+/** Dashes are optional in Mojang uuids, so everything is stored in the short lowercase form. */
+function normaliseUuid(value) {
+	return String(value ?? "")
+		.replace(/-/g, "")
+		.trim()
+		.toLowerCase()
 }
 
 /**
@@ -103,6 +112,11 @@ export class Accounts {
 		return Object.keys(this.state.users).length
 	}
 
+	/** How long a fresh session lives, in seconds. Used by the launcher handoff. */
+	sessionMaxAge() {
+		return Math.round(SESSION_TTL_MS / 1000)
+	}
+
 	user(username) {
 		const key = String(username ?? "")
 			.trim()
@@ -114,7 +128,32 @@ export class Accounts {
 		const key = String(email ?? "")
 			.trim()
 			.toLowerCase()
+		if (key === "") {
+			return null
+		}
 		return Object.values(this.state.users).find((user) => user.emailKey === key) ?? null
+	}
+
+	byMinecraftId(uuid) {
+		const id = normaliseUuid(uuid)
+		if (id === "") {
+			return null
+		}
+		return Object.values(this.state.users).find((user) => user.minecraftId === id) ?? null
+	}
+
+	byMinecraftName(name) {
+		const wanted = String(name ?? "")
+			.trim()
+			.toLowerCase()
+		if (wanted === "") {
+			return null
+		}
+		return (
+			Object.values(this.state.users).find(
+				(user) => String(user.minecraft ?? "").toLowerCase() === wanted,
+			) ?? null
+		)
 	}
 
 	/** Everything the website is allowed to see about an account. The secret never leaves here. */
@@ -124,12 +163,20 @@ export class Accounts {
 		}
 		return {
 			username: user.username,
-			email: user.email,
+			email: user.email ?? "",
 			role: user.role,
 			minecraft: user.minecraft ?? "",
+			minecraftId: user.minecraftId ?? "",
+			verified: String(user.minecraftId ?? "") !== "",
+			hasPassword: String(user.secret ?? "") !== "",
 			createdAt: user.createdAt,
 			lastLoginAt: user.lastLoginAt ?? null,
 		}
+	}
+
+	/** True when this account should own the panel: nobody else does, or the owner named it. */
+	firstAdmin(key) {
+		return this.count() === 0 || (this.adminUsername !== "" && this.adminUsername === key)
 	}
 
 	/**
@@ -161,21 +208,123 @@ export class Accounts {
 			return { error: "that email address is already registered" }
 		}
 
-		const first = this.count() === 0
-		const named = this.adminUsername !== "" && this.adminUsername === key
+		const admin = this.firstAdmin(key)
 		const user = {
 			username: name,
 			key,
 			email: mail,
 			emailKey: mail,
 			secret: hashPassword(secret),
-			role: first || named ? "admin" : "member",
+			role: admin ? "admin" : "member",
 			minecraft: "",
+			minecraftId: "",
 			createdAt: new Date().toISOString(),
 			lastLoginAt: null,
 		}
 
 		this.state.users[key] = user
+		this.schedulePersist()
+		return { user }
+	}
+
+	/** A free username built from an in game name, since Minecraft sign in asks for nothing. */
+	uniqueUsername(base) {
+		let candidate = String(base ?? "").replace(/[^A-Za-z0-9_]/g, "")
+		if (candidate.length < 3) {
+			candidate = `${candidate}_mc`
+		}
+		candidate = candidate.slice(0, 20)
+
+		if (this.state.users[candidate.toLowerCase()] === undefined) {
+			return candidate
+		}
+		for (let index = 2; index < 100; index += 1) {
+			const suffix = String(index)
+			const taken = candidate.slice(0, 20 - suffix.length) + suffix
+			if (this.state.users[taken.toLowerCase()] === undefined) {
+				return taken
+			}
+		}
+		return `${candidate.slice(0, 13)}_${randomBytes(3).toString("hex")}`
+	}
+
+	/**
+	 * Signs in with a Minecraft identity that the caller already checked with Mojang.
+	 *
+	 * Three cases, in order: the uuid is known, so that is the account; the name matches an account
+	 * that linked it by hand, so the claim is upgraded to a verified one; or nobody owns it, so an
+	 * account is created on the spot with no password. Passwordless accounts can only be reached
+	 * through Minecraft until the owner sets one on the account page.
+	 */
+	signInWithMinecraft(profile) {
+		const id = normaliseUuid(profile?.uuid)
+		const name = String(profile?.name ?? "").trim()
+		if (!MINECRAFT_UUID.test(id) || !MINECRAFT_NAME.test(name)) {
+			return { error: "that Minecraft profile does not look right" }
+		}
+
+		let user = this.byMinecraftId(id)
+		let created = false
+
+		if (user === null) {
+			const claimed = this.byMinecraftName(name)
+			if (claimed !== null && String(claimed.minecraftId ?? "") === "") {
+				user = claimed
+			}
+		}
+
+		if (user === null) {
+			const username = this.uniqueUsername(name)
+			const key = username.toLowerCase()
+			user = {
+				username,
+				key,
+				email: "",
+				emailKey: "",
+				secret: "",
+				role: this.firstAdmin(key) ? "admin" : "member",
+				minecraft: name,
+				minecraftId: id,
+				createdAt: new Date().toISOString(),
+				lastLoginAt: null,
+			}
+			this.state.users[key] = user
+			created = true
+		}
+
+		// Names change, uuids do not, so the stored name follows the account rather than the
+		// other way round.
+		user.minecraftId = id
+		user.minecraft = name
+		user.lastLoginAt = new Date().toISOString()
+		this.schedulePersist()
+		return { user, created }
+	}
+
+	/** Links a checked Minecraft identity to an account that is already signed in. */
+	linkVerified(username, profile) {
+		const user = this.user(username)
+		if (user === null) {
+			return { error: "that account does not exist" }
+		}
+
+		const id = normaliseUuid(profile?.uuid)
+		const name = String(profile?.name ?? "").trim()
+		if (!MINECRAFT_UUID.test(id) || !MINECRAFT_NAME.test(name)) {
+			return { error: "that Minecraft profile does not look right" }
+		}
+
+		const owner = this.byMinecraftId(id)
+		if (owner !== null && owner.key !== user.key) {
+			return { error: "another account already owns that Minecraft account" }
+		}
+		const named = this.byMinecraftName(name)
+		if (named !== null && named.key !== user.key) {
+			return { error: "another account already claims that Minecraft name" }
+		}
+
+		user.minecraftId = id
+		user.minecraft = name
 		this.schedulePersist()
 		return { user }
 	}
@@ -209,7 +358,7 @@ export class Accounts {
 			expiresAt: new Date(Date.now() + SESSION_TTL_MS).toISOString(),
 		}
 		this.schedulePersist()
-		return { token, maxAgeSeconds: Math.round(SESSION_TTL_MS / 1000) }
+		return { token, maxAgeSeconds: this.sessionMaxAge() }
 	}
 
 	sessionUser(token) {
@@ -266,12 +415,18 @@ export class Accounts {
 		return removed
 	}
 
+	/**
+	 * Changes a password. An account created through Minecraft has none yet, so the current one is
+	 * only demanded when there is something to check.
+	 */
 	changePassword(username, current, next) {
 		const user = this.user(username)
 		if (user === null) {
 			return { error: "that account does not exist" }
 		}
-		if (!verifyPassword(String(current ?? ""), user.secret)) {
+
+		const hasPassword = String(user.secret ?? "") !== ""
+		if (hasPassword && !verifyPassword(String(current ?? ""), user.secret)) {
 			return { error: "the current password is wrong" }
 		}
 
@@ -286,6 +441,31 @@ export class Accounts {
 		return { user }
 	}
 
+	/** Adds or replaces the email address, needed by accounts made through Minecraft. */
+	setEmail(username, email) {
+		const user = this.user(username)
+		if (user === null) {
+			return { error: "that account does not exist" }
+		}
+
+		const mail = String(email ?? "")
+			.trim()
+			.toLowerCase()
+		if (!EMAIL.test(mail)) {
+			return { error: "that email address does not look right" }
+		}
+
+		const owner = this.byEmail(mail)
+		if (owner !== null && owner.key !== user.key) {
+			return { error: "that email address is already registered" }
+		}
+
+		user.email = mail
+		user.emailKey = mail
+		this.schedulePersist()
+		return { user }
+	}
+
 	/** Ties a website account to an in game name so cosmetics can follow the person. */
 	linkMinecraft(username, minecraft) {
 		const user = this.user(username)
@@ -296,6 +476,9 @@ export class Accounts {
 		const name = String(minecraft ?? "").trim()
 		if (name !== "" && !MINECRAFT_NAME.test(name)) {
 			return { error: "that is not a valid Minecraft name" }
+		}
+		if (name === "" && String(user.minecraftId ?? "") !== "") {
+			return { error: "a verified Minecraft account cannot be unlinked by hand" }
 		}
 
 		const taken = Object.values(this.state.users).find(
@@ -364,6 +547,7 @@ export class Accounts {
 			registered: users.length,
 			admins: users.filter((user) => user.role === "admin").length,
 			linked: users.filter((user) => String(user.minecraft ?? "") !== "").length,
+			verified: users.filter((user) => String(user.minecraftId ?? "") !== "").length,
 			newToday: users.filter((user) => Date.parse(user.createdAt) >= dayAgo).length,
 			newThisWeek: users.filter((user) => Date.parse(user.createdAt) >= weekAgo).length,
 			activeSessions: Object.keys(this.state.sessions).length,
