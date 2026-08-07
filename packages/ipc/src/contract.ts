@@ -39,6 +39,28 @@ import type {
 	WorldEntry,
 } from "./types.ts"
 
+/**
+ * A cape from the Halcyon backend. The texture arrives as a data url because the window only
+ * draws images from itself, data and https, while the backend answers on plain http.
+ */
+export type CosmeticEntry = {
+	readonly id: string
+	readonly name: string
+	readonly description: string
+	readonly rarity: string
+	readonly textureUrl: string
+	readonly owned: boolean
+}
+
+export type CosmeticWardrobe = {
+	readonly backendUrl: string
+	readonly playerName: string | null
+	readonly signedIn: boolean
+	readonly equipped: string | null
+	readonly cosmetics: readonly CosmeticEntry[]
+	readonly message: string
+}
+
 export type IpcContract = {
 	"app:info": () => AppInfo
 	"app:openPath": (target: string) => void
@@ -147,6 +169,11 @@ export type IpcContract = {
 	"skins:remove": (skinId: string) => readonly SkinEntry[]
 	"skins:favorite": (skinId: string, favorite: boolean) => readonly SkinEntry[]
 	"skins:download": (skinId: string) => string | null
+
+	"cosmetics:load": () => CosmeticWardrobe
+	"cosmetics:link": () => CosmeticWardrobe
+	"cosmetics:equip": (cosmeticId: string | null) => CosmeticWardrobe
+	"cosmetics:openSite": () => boolean
 
 	"java:list": () => readonly JavaRuntime[]
 	"java:detect": () => readonly JavaRuntime[]
@@ -275,6 +302,10 @@ export const IPC_CHANNELS = [
 	"skins:remove",
 	"skins:favorite",
 	"skins:download",
+	"cosmetics:load",
+	"cosmetics:link",
+	"cosmetics:equip",
+	"cosmetics:openSite",
 	"java:list",
 	"java:detect",
 	"java:install",

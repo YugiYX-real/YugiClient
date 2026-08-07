@@ -17,6 +17,7 @@ import { BackupService, DEFAULT_BACKUP_INDEX } from "./services/backup-service.t
 import type { BackupIndex } from "./services/backup-service.ts"
 import { CompanionService } from "./services/companion-service.ts"
 import { ContentService } from "./services/content-service.ts"
+import { CosmeticsService } from "./services/cosmetics-service.ts"
 import { DashboardService } from "./services/dashboard-service.ts"
 import { DownloadService } from "./services/download-service.ts"
 import { DEFAULT_INSTANCE_STATE, InstanceService } from "./services/instance-service.ts"
@@ -67,6 +68,7 @@ export type Container = {
 	readonly statistics: StatisticsService
 	readonly presence: PresenceService
 	readonly companion: CompanionService
+	readonly cosmetics: CosmeticsService
 	readonly launch: LaunchService
 	readonly versionChanges: VersionChangeService
 	readonly updates: UpdateService
@@ -199,6 +201,14 @@ export async function createContainer(options: {
 		logger: log.logger("companion"),
 	})
 
+	// The wardrobe talks to the same backend the companion mod points every instance at, so a
+	// cape picked in the launcher is the cape worn in game.
+	const cosmetics = new CosmeticsService({
+		auth,
+		companion,
+		logger: log.logger("cosmetics"),
+	})
+
 	const launch = new LaunchService({
 		instances,
 		versions,
@@ -303,6 +313,7 @@ export async function createContainer(options: {
 		statistics,
 		presence,
 		companion,
+		cosmetics,
 		launch,
 		versionChanges,
 		updates,
