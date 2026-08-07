@@ -24,9 +24,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /**
  * Replaces the vanilla title screen with the Halcyon menu.
  *
- * <p>The panorama is replaced by a picture of your choosing, the button column is rebuilt with
- * Halcyon widgets, and the header carries the wordmark. The vanilla destinations are reused rather
- * than reimplemented, so singleplayer, multiplayer and options behave exactly as they always did.
+ * <p>The panorama is replaced by a picture, the button column is rebuilt with Halcyon widgets, and
+ * the header carries the wordmark. The vanilla destinations are reused rather than reimplemented,
+ * so singleplayer, multiplayer and options behave exactly as they always did.
  */
 @Mixin(TitleScreen.class)
 public abstract class TitleScreenMixin extends Screen {
@@ -130,7 +130,12 @@ public abstract class TitleScreenMixin extends Screen {
 					pictureHeight,
 					pictureWidth,
 					pictureHeight);
-			context.fill(0, 0, width, height, SCRIM);
+
+			// A photo needs dimming so the labels stay readable. The painted scene is already
+			// tuned for text, so darkening it twice would only make it muddy.
+			if (HalcyonMenuBackground.isCustom()) {
+				context.fill(0, 0, width, height, SCRIM);
+			}
 		} else {
 			halcyon$paintGradient(context, width, height);
 		}
@@ -175,7 +180,7 @@ public abstract class TitleScreenMixin extends Screen {
 		}
 	}
 
-	/** Painted fallback for when no background picture has been placed. */
+	/** Last resort fill for when even the painted scene could not be built. */
 	private void halcyon$paintGradient(DrawContext context, int width, int height) {
 		int bands = 48;
 		for (int index = 0; index < bands; index++) {
