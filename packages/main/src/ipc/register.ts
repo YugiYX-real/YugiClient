@@ -57,6 +57,7 @@ export function registerIpc(container: Container): void {
 		backups,
 		build,
 		content,
+		cosmetics,
 		dashboard,
 		downloads,
 		events,
@@ -397,6 +398,19 @@ export function registerIpc(container: Container): void {
 			}
 			await writeFile(target, await readFile(entry.filePath))
 			return target
+		},
+
+		"cosmetics:load": () => cosmetics.load(),
+		"cosmetics:link": () => cosmetics.link(),
+		"cosmetics:equip": (cosmeticId: string | null) => cosmetics.equip(cosmeticId),
+		"cosmetics:openSite": async () => {
+			// The link carries a session, so the website opens already signed in as this player.
+			const target = await cosmetics.handoffUrl()
+			if (target === null) {
+				return false
+			}
+			void shell.openExternal(target)
+			return true
 		},
 
 		"java:list": () => java.detect(),
