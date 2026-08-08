@@ -1,11 +1,12 @@
 /*
- * Reads a Blockbench model in the browser and reduces it to the small fixed shape the client builds
- * a model from.
+ * Reads a model in the browser and reduces it to the small fixed shape the client builds from.
  *
  * A .bbmodel and a Minecraft model .json are both json with a list of boxes in them, so the panel
- * accepts either and the mod never has to know about Blockbench at all. Coordinates come out in the
- * space Minecraft entity models use, where y grows downwards, so the mod can hand them straight to
- * a model builder.
+ * accepts either and the mod never has to know about Blockbench at all. A .gltf and a .glb are read
+ * as well, with one caveat that is stated plainly rather than hidden: glTF is a triangle mesh
+ * format and the game builds boxes, so every mesh part comes across as the box it fits inside.
+ * Coordinates come out in the space Minecraft entity models use, where y grows downwards, so the
+ * mod can hand them straight to a model builder.
  *
  * A piece is often drawn as several modules, a left wing and a right wing and a harness, each saved
  * to its own file. Several files are read and joined into one model here, so the client still gets
@@ -13,8 +14,10 @@
  * a cosmetic wears one png.
  *
  * An animated cosmetic is one tall png with the frames stacked in it and an animation mcmeta beside
- * it, which is the same pair Minecraft uses for its own animated textures. That is why painting
- * takes a frame number: the picture of one frame is a window down the strip.
+ * it, which is the same pair Minecraft uses for its own animated textures. Several pngs picked at
+ * once are stacked into that strip here, so drawing frame by frame is enough and nobody has to
+ * assemble a sheet by hand. That is also why painting takes a frame number: the picture of one
+ * frame is a window down the strip.
  *
  * This hangs off the window rather than a bare const so the other scripts on the page can reach it.
  */
@@ -24,12 +27,21 @@ window.HalcyonModel = (() => {
 	const MAX_CUBES = 128
 	const MAX_FRAMES = 64
 
+	/** The file endings a model can be read out of. */
+	const MODEL_EXTENSIONS = [".bbmodel", ".json", ".gltf", ".glb"]
+
 	function round(value) {
 		return Math.round(Number(value) * 1000) / 1000
 	}
 
 	function triple(value) {
 		return Array.isArray(value) && value.length >= 3 && value.every((entry) => Number.isFinite(Number(entry)))
+	}
+
+	/** A texture sheet size, kept sane and falling back to the usual 64. */
+	function sheet(value) {
+		const size = Math.round(Number(value))
+		return Number.isFinite(size) && size > 0 ? Math.min(4096, size) : 64
 	}
 
 	/** Where a box takes its picture from, in texture pixels. */
@@ -122,6 +134,246 @@ window.HalcyonModel = (() => {
 		return { format: FORMAT, textureWidth, textureHeight, cubes }
 	}
 
+	/** True for the two glTF endings, which are read differently from the json models. */
+	function isGltfName(name) {
+		return /\.(gltf|glb)$/i.test(String(name ?? ""))
+	}
+
+	/**
+	 * Pulls the json description out of a picked glTF file.
+	 *
+	 * A .gltf is json already. A .glb is a tiny container: twelve bytes of header and then chunks,
+	 * the first of which is that same json. Only the json is needed here, because every glTF writes
+	 * the corner points of a mesh into the accessor that holds its positions, so the boxes can be
+	 * worked out without ever touching the binary vertex data.
+	 */
+	async function gltfJson(file) {
+		if (/\.gltf$/i.test(String(file.name ?? ""))) {
+			const text = await file.text()
+			try {
+				return JSON.parse(text)
+			} catch {
+				throw new Error("that gltf is not readable json")
+			}
+		}
+
+		const buffer = await file.arrayBuffer()
+		if (buffer.byteLength < 20) {
+			throw new Error("that glb is too short to hold a model")
+		}
+
+		const view = new DataView(buffer)
+		if (view.getUint32(0, true) !== 0x46546c67) {
+			throw new Error("that file does not start like a glb")
+		}
+
+		let offset = 12
+		while (offset + 8 <= buffer.byteLength) {
+			const length = view.getUint32(offset, true)
+			const kind = view.getUint32(offset + 4, true)
+			if (kind === 0x4e4f534a) {
+				const text = new TextDecoder().decode(new Uint8Array(buffer, offset + 8, length))
+				try {
+					return JSON.parse(text)
+				} catch {
+					throw new Error("the json inside that glb could not be read")
+				}
+			}
+			offset += 8 + length
+		}
+		throw new Error("that glb holds no json chunk")
+	}
+
+	/** The corner points an accessor declares, which every exporter writes for positions. */
+	function accessorBox(json, index) {
+		if (!Number.isInteger(index)) {
+			return null
+		}
+
+		const accessor = (json.accessors ?? [])[index]
+		if (accessor === undefined || accessor === null) {
+			return null
+		}
+		if (!Array.isArray(accessor.min) || !Array.isArray(accessor.max)) {
+			return null
+		}
+		if (accessor.min.length < 2 || accessor.max.length < 2) {
+			return null
+		}
+		return { min: accessor.min.map(Number), max: accessor.max.map(Number) }
+	}
+
+	/**
+	 * How far a node moves and how much it grows what is under it.
+	 *
+	 * Turning is deliberately ignored: a box that has been turned is no longer a box, and quietly
+	 * pretending otherwise would place the piece somewhere it was never drawn. Draw the piece the way
+	 * round it should be worn and it comes across unchanged.
+	 */
+	function nodeTransform(node) {
+		if (Array.isArray(node.matrix) && node.matrix.length === 16) {
+			const cells = node.matrix.map(Number)
+			return {
+				scale: [
+					Math.hypot(cells[0], cells[1], cells[2]) || 1,
+					Math.hypot(cells[4], cells[5], cells[6]) || 1,
+					Math.hypot(cells[8], cells[9], cells[10]) || 1,
+				],
+				move: [cells[12], cells[13], cells[14]],
+			}
+		}
+
+		return {
+			scale: triple(node.scale) ? node.scale.map(Number) : [1, 1, 1],
+			move: triple(node.translation) ? node.translation.map(Number) : [0, 0, 0],
+		}
+	}
+
+	/** Walks the scene and returns one entry per mesh part, with where it sits in the world. */
+	function gltfBoxes(json) {
+		const nodes = json.nodes ?? []
+		const found = []
+		const seen = new Set()
+
+		const collect = (meshIndex, world, label) => {
+			const mesh = (json.meshes ?? [])[meshIndex]
+			if (mesh === undefined || mesh === null) {
+				return
+			}
+
+			const primitives = Array.isArray(mesh.primitives) ? mesh.primitives : []
+			for (let index = 0; index < primitives.length; index += 1) {
+				const primitive = primitives[index] ?? {}
+				const attributes = primitive.attributes ?? {}
+				const position = accessorBox(json, attributes.POSITION)
+				if (position === null) {
+					continue
+				}
+				found.push({
+					name: primitives.length === 1 ? label : `${label}/${index}`,
+					position,
+					uv: accessorBox(json, attributes.TEXCOORD_0),
+					world,
+				})
+			}
+		}
+
+		const walk = (index, parent) => {
+			const node = nodes[index]
+			if (node === undefined || node === null || seen.has(index)) {
+				return
+			}
+			seen.add(index)
+
+			const local = nodeTransform(node)
+			const world = {
+				scale: [0, 1, 2].map((axis) => parent.scale[axis] * local.scale[axis]),
+				move: [0, 1, 2].map((axis) => parent.move[axis] + parent.scale[axis] * local.move[axis]),
+			}
+
+			if (Number.isInteger(node.mesh)) {
+				const label =
+					typeof node.name === "string" && node.name !== "" ? node.name : `part${index}`
+				collect(node.mesh, world, label)
+			}
+			for (const child of node.children ?? []) {
+				walk(child, world)
+			}
+		}
+
+		const origin = { scale: [1, 1, 1], move: [0, 0, 0] }
+		const scene = (json.scenes ?? [])[Number.isInteger(json.scene) ? json.scene : 0]
+		if (scene !== undefined && scene !== null && Array.isArray(scene.nodes)) {
+			for (const index of scene.nodes) {
+				walk(index, origin)
+			}
+		}
+		// Anything the scene did not reach is still worth having, and walking it twice is blocked by
+		// the set of nodes already seen.
+		for (let index = 0; index < nodes.length; index += 1) {
+			walk(index, origin)
+		}
+		return found
+	}
+
+	/**
+	 * Turns a glTF into the client shape.
+	 *
+	 * Every mesh part comes across as the box it fits inside, because that is the honest translation
+	 * between a triangle mesh and a model made of boxes. A piece drawn as a handful of parts, which
+	 * is how wings are usually built, survives that very well; a single sculpted mesh comes out as
+	 * one plain box, and .bbmodel stays the exact route.
+	 */
+	function normaliseGltf(json) {
+		if (json === null || typeof json !== "object") {
+			throw new Error("that file is not a model")
+		}
+
+		const parts = gltfBoxes(json)
+		if (parts.length === 0) {
+			throw new Error("that gltf holds no mesh with corner points in it, so there is nothing to build")
+		}
+
+		const corners = parts.map((part) => ({
+			name: part.name,
+			min: [0, 1, 2].map(
+				(axis) => part.world.move[axis] + part.world.scale[axis] * Number(part.position.min[axis] ?? 0),
+			),
+			max: [0, 1, 2].map(
+				(axis) => part.world.move[axis] + part.world.scale[axis] * Number(part.position.max[axis] ?? 0),
+			),
+			uv: part.uv,
+		}))
+
+		let extent = 0
+		for (const box of corners) {
+			for (const axis of [0, 1, 2]) {
+				extent = Math.max(extent, box.max[axis] - box.min[axis])
+			}
+		}
+
+		// glTF is written in metres and a block is a metre, so a piece drawn at world size is turned
+		// into model pixels, sixteen to a block. A piece already drawn in pixels, which is what comes
+		// out of Blockbench, is left as it is.
+		const perUnit = extent > 0 && extent <= 8 ? 16 : 1
+
+		const extras = json.extras ?? {}
+		const textureWidth = sheet(extras.textureWidth ?? extras.texture_width)
+		const textureHeight = sheet(extras.textureHeight ?? extras.texture_height)
+
+		const cubes = []
+		for (const box of corners) {
+			const uv =
+				box.uv === null
+					? [0, 0]
+					: [
+							round(Math.max(0, Math.min(1, box.uv.min[0])) * textureWidth),
+							round(Math.max(0, Math.min(1, box.uv.min[1])) * textureHeight),
+						]
+
+			cubes.push({
+				name: String(box.name).slice(0, 40),
+				x: round(box.min[0] * perUnit),
+				// glTF has y growing upwards like Blockbench, and entity model space has it growing
+				// downwards, so the top corner is negated exactly as it is for a .bbmodel.
+				y: round(-box.max[1] * perUnit),
+				z: round(box.min[2] * perUnit),
+				width: round((box.max[0] - box.min[0]) * perUnit),
+				height: round((box.max[1] - box.min[1]) * perUnit),
+				depth: round((box.max[2] - box.min[2]) * perUnit),
+				u: uv[0],
+				v: uv[1],
+				inflate: 0,
+			})
+
+			if (cubes.length === MAX_CUBES) {
+				break
+			}
+		}
+
+		return { format: FORMAT, textureWidth, textureHeight, cubes }
+	}
+
 	/** The part of a file name that is worth keeping in front of a box name. */
 	function stem(name) {
 		return String(name ?? "")
@@ -188,8 +440,12 @@ window.HalcyonModel = (() => {
 		}
 	}
 
-	/** Reads a picked .bbmodel or .json file. */
+	/** Reads one picked model file, whichever of the four endings it has. */
 	async function fromFile(file) {
+		if (isGltfName(file.name)) {
+			return normaliseGltf(await gltfJson(file))
+		}
+
 		const text = await file.text()
 		let json = null
 		try {
@@ -221,6 +477,56 @@ window.HalcyonModel = (() => {
 			}
 		}
 		return merge(parts)
+	}
+
+	/**
+	 * Stacks several pictures into the one tall strip an animation is.
+	 *
+	 * Every frame has to be the same size, because a strip is read by cutting it into equal slices,
+	 * and a frame of a different size would shift every frame after it. The result is a png blob
+	 * ready to upload, so nobody has to assemble a sheet in an image editor.
+	 */
+	async function strip(images) {
+		const list = Array.from(images ?? [])
+		if (list.length === 0) {
+			throw new Error("no picture was picked")
+		}
+		if (list.length > MAX_FRAMES) {
+			throw new Error(`an animation holds at most ${MAX_FRAMES} frames`)
+		}
+
+		const width = list[0].naturalWidth
+		const height = list[0].naturalHeight
+		for (const image of list) {
+			if (image.naturalWidth !== width || image.naturalHeight !== height) {
+				throw new Error(
+					`every frame has to be the same size, and this one is ${image.naturalWidth}x${image.naturalHeight} ` +
+						`while the first is ${width}x${height}`,
+				)
+			}
+		}
+
+		const canvas = document.createElement("canvas")
+		canvas.width = width
+		canvas.height = height * list.length
+
+		const context = canvas.getContext("2d")
+		context.imageSmoothingEnabled = false
+		for (let index = 0; index < list.length; index += 1) {
+			context.drawImage(list[index], 0, index * height)
+		}
+
+		const blob = await new Promise((resolve, reject) => {
+			canvas.toBlob((made) => {
+				if (made === null) {
+					reject(new Error("the frames could not be joined into one picture"))
+					return
+				}
+				resolve(made)
+			}, "image/png")
+		})
+
+		return { blob, width, height: height * list.length, frames: list.length }
 	}
 
 	/**
@@ -256,6 +562,16 @@ window.HalcyonModel = (() => {
 			},
 			frametime,
 			frameMs: Math.max(20, frametime * 50),
+		}
+	}
+
+	/** The mcmeta written for an animation that was stacked here rather than picked. */
+	function mcmetaFor(frametime) {
+		const ticks = Number.isFinite(Number(frametime)) && Number(frametime) > 0 ? Math.min(200, Math.round(Number(frametime))) : 2
+		return {
+			mcmeta: { animation: { frametime: ticks, interpolate: false } },
+			frametime: ticks,
+			frameMs: Math.max(20, ticks * 50),
 		}
 	}
 
@@ -421,11 +737,15 @@ window.HalcyonModel = (() => {
 		FORMAT,
 		MAX_CUBES,
 		MAX_FRAMES,
+		MODEL_EXTENSIONS,
 		normalise,
+		normaliseGltf,
 		merge,
 		fromFile,
 		fromFiles,
+		strip,
 		mcmetaFromFile,
+		mcmetaFor,
 		frames,
 		bounds,
 		paint,
