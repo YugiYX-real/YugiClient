@@ -1,6 +1,5 @@
 {
-	"tag": "v1.2.8",
-	"name": "Halcyon 1.2.8",
-	"requestedAt": "2026-08-08T17:35:00Z",
-	"reason": "Several textures and gltf models in the admin panel, a file list you can delete from, animated previews in the wardrobe, and wings that hang on the body instead of under the ground"
+	"tag": "v1.2.9",
+	"name": "Halcyon 1.2.9",
+	"requestedAt": "2026-08-08T19:05:00Z"
 }
