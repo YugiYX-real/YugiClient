@@ -149,21 +149,55 @@ const Halcyon = (() => {
 		return user
 	}
 
-	function capeUrl(cosmetic) {
+	/** What a cosmetic is. Anything the backend does not name counts as a cape. */
+	function kindOf(cosmetic) {
+		const type = String(cosmetic?.type ?? "cape").toLowerCase()
+		return type === "" ? "cape" : type
+	}
+
+	/**
+	 * The picture to show for a cosmetic.
+	 *
+	 * Animated cosmetics keep their gif, because a gif animates in an img or a background on its own
+	 * and needs no javascript at all. Everything else falls back to the still texture.
+	 */
+	function cosmeticUrl(cosmetic) {
+		const id = String(cosmetic?.id ?? "")
+		if (cosmetic?.animated === true && id !== "") {
+			return `/v1/cosmetics/textures/${id}.gif`
+		}
 		const texture = String(cosmetic?.texture ?? "")
 		if (texture === "") {
-			return `/v1/cosmetics/textures/${cosmetic?.id}.png`
+			return `/v1/cosmetics/textures/${id}.png`
 		}
 		return texture
 	}
 
-	/** One cape tile, used by the catalogue, the account page and the admin panel. */
+	/** Kept under its old name so older pages keep working. */
+	function capeUrl(cosmetic) {
+		return cosmeticUrl(cosmetic)
+	}
+
+	/**
+	 * One cosmetic tile, used by the catalogue, the account page and the admin panel.
+	 *
+	 * A cape is a 64x32 sheet where only one region is the visible cloth, so it stays cropped. Wings,
+	 * hats, halos and the rest are whole pictures, often square gif frames, and cropping those is
+	 * what made them look empty, so they are shown complete and centred instead.
+	 */
 	function capeCard(cosmetic, extra = "") {
+		const kind = kindOf(cosmetic)
+		const url = escape(cosmeticUrl(cosmetic))
+		const art =
+			kind === "cape"
+				? `<div class="cape" style="background-image:url('${url}')"></div>`
+				: `<div class="cape" style="background-image:url('${url}');width:96px;height:96px;background-size:contain;background-position:center;background-repeat:no-repeat"></div>`
+		const badge = cosmetic?.animated === true ? " &middot; animated" : ""
 		return `
 			<div class="cape-card">
-				<div class="cape" style="background-image:url('${escape(capeUrl(cosmetic))}')"></div>
+				${art}
 				<div class="name">${escape(cosmetic.name ?? cosmetic.id)}</div>
-				<div class="meta">${escape(cosmetic.rarity ?? "common")}</div>
+				<div class="meta">${escape(cosmetic.rarity ?? "common")} &middot; ${escape(kind)}${badge}</div>
 				${extra}
 			</div>`
 	}
@@ -189,6 +223,8 @@ const Halcyon = (() => {
 		toast,
 		say,
 		clear,
+		kindOf,
+		cosmeticUrl,
 		capeCard,
 		capeUrl,
 		logout,
