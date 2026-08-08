@@ -1,6 +1,7 @@
 package gg.halcyon.companion;
 
 import java.lang.ref.WeakReference;
+import java.util.Map;
 import net.minecraft.client.render.command.OrderedRenderCommandQueue;
 import net.minecraft.client.render.entity.feature.FeatureRenderer;
 import net.minecraft.client.render.entity.feature.FeatureRendererContext;
@@ -14,7 +15,9 @@ import net.minecraft.util.math.RotationAxis;
  * Draws every Halcyon cosmetic that is not a cape.
  *
  * <p>A cape is the one cosmetic the vanilla player model already knows how to wear, so capes keep
- * using the vanilla cape slot. Everything else is drawn here, placed per kind against the body.
+ * using the vanilla cape slot and are skipped here. Everything else is drawn per kind against the
+ * body, and one of every kind is worn at a time, so a pair of wings and a shield and a hat are all
+ * drawn on the same player.
  *
  * <p>Two rules keep a cosmetic looking attached rather than floating. It is anchored to a point on
  * the body rather than somewhere above it, and anything worn on the body only moves when the player
@@ -23,9 +26,6 @@ import net.minecraft.util.math.RotationAxis;
  */
 public final class HalcyonCosmeticFeature
 		extends FeatureRenderer<PlayerEntityRenderState, PlayerEntityModel> {
-	private static final String[] SLOTS = {
-		"back", "shield", "head", "halo", "face", "shoulder", "aura", "trail"
-	};
 	private static final int WHITE = 0xFFFFFFFF;
 	private static final int FULL_BRIGHT = 0xF000F0;
 
@@ -67,16 +67,14 @@ public final class HalcyonCosmeticFeature
 		}
 
 		HalcyonCosmetics cosmetics = HalcyonCosmetics.get();
-		for (String slot : SLOTS) {
-			String id = cosmetics.equippedIn(slot);
-			if (id == null || id.isEmpty()) {
-				continue;
-			}
-			String kind = cosmetics.kindOf(id);
+		for (Map.Entry<String, String> entry : cosmetics.wornByKind().entrySet()) {
+			String kind = entry.getKey();
 			if ("cape".equals(kind)) {
+				// Worn through the vanilla cape slot, so drawing it here would double it up.
 				continue;
 			}
-			Identifier texture = cosmetics.texture(id);
+
+			Identifier texture = cosmetics.texture(entry.getValue());
 			if (texture == null) {
 				continue;
 			}
@@ -147,6 +145,10 @@ public final class HalcyonCosmeticFeature
 	 * towards the player's back. The body runs from the neck at y 0 down to the hips at y 12, and its
 	 * back is at z 2, which is why anything worn on the back starts just below zero rather than above
 	 * it.
+	 *
+	 * <p>Three kinds hang off the back and can be worn together, so they are staggered in z: the cape
+	 * is the vanilla one closest to the body, wings sit just behind it, and a shield and a backpack
+	 * sit behind those rather than inside them.
 	 */
 	private static float[] placement(String kind) {
 		switch (kind) {
@@ -163,10 +165,10 @@ public final class HalcyonCosmeticFeature
 			case "trail":
 				return new float[] {0.0F, 9.0F, 3.4F, 1.15F, 0.45F, 1.0F};
 			case "backpack":
-				return new float[] {0.0F, 1.0F, 2.4F, 0.7F, 0.1F, 1.0F};
+				return new float[] {0.0F, 1.0F, 3.2F, 0.7F, 0.1F, 1.0F};
 			case "shield":
-				// Strapped flat on the back, a little lower and smaller than wings.
-				return new float[] {0.0F, 1.5F, 2.6F, 0.6F, 0.05F, 1.0F};
+				// Strapped flat on the back, behind the cape and the wings.
+				return new float[] {0.0F, 1.5F, 3.6F, 0.6F, 0.05F, 1.0F};
 			default:
 				// Wings, and anything new that lands on the back. Hung from just under the neck,
 				// tight against the back, so the picture covers the shoulders and not the sky.

@@ -35,15 +35,14 @@ import java.util.concurrent.ConcurrentHashMap;
  * them, so a cape can only ever be worn after the owner handed it out. The client caches the
  * catalogue, downloads the pictures once and remembers what is worn between sessions.
  *
- * <p>A cosmetic is more than a cape now. Every entry carries a kind, which decides both the tab it
- * appears under in game and the slot it occupies, so wings and a hat can be worn at the same time
- * while two capes cannot.
+ * <p>Wearing is one per kind. A cape, a pair of wings, a shield and a hat are all on the player at
+ * the same time, and only a second cape takes the first one off. That is why what is worn is kept
+ * keyed by the kind rather than by the place on the body: three different kinds hang off the back.
  *
- * <p>Animation comes in two shapes. The owner can hand the panel a set of pictures, one per frame,
- * which arrive here as a list of addresses and are played by swapping the whole texture; that is
- * the way to make an animation of your own, and it animates in the world as well as in the menu.
- * A single tall strip of frames is also understood, which is how the first animated capes were
- * built.
+ * <p>Something that moves is one tall png with its frames stacked in it and an animation mcmeta
+ * beside it, which is the same pair Minecraft uses for its own animated textures. The record says
+ * how many frames there are and how long each one lasts, and the picture is played by sliding a
+ * window down the strip.
  */
 public final class HalcyonCosmetics {
 	/**
@@ -54,17 +53,34 @@ public final class HalcyonCosmetics {
 	 */
 	public record Cape(String id, String name, String description, String rarity, String texture) {}
 
-	/** The slot a kind takes up, so one of each can be worn at a time. */
-	private static final Map<String, String> SLOTS = Map.of(
-			"cape", "back",
-			"wings", "back",
-			"backpack", "back",
-			"hat", "head",
-			"halo", "halo",
-			"mask", "face",
-			"shoulder", "shoulder",
-			"aura", "aura",
-			"trail", "trail");
+	/**
+	 * Where each kind sits on the body. Two kinds may share a place, because they are worn together
+	 * rather than instead of one another.
+	 */
+	private static final Map<String, String> SLOTS = Map.ofEntries(
+			Map.entry("cape", "back"),
+			Map.entry("wings", "wings"),
+			Map.entry("backpack", "backpack"),
+			Map.entry("shield", "shield"),
+			Map.entry("hat", "head"),
+			Map.entry("halo", "halo"),
+			Map.entry("mask", "face"),
+			Map.entry("shoulder", "shoulder"),
+			Map.entry("aura", "aura"),
+			Map.entry("trail", "trail"));
+
+	/** Every kind, in the order the wardrobe lists them. */
+	public static final List<String> KINDS = List.of(
+			"cape",
+			"wings",
+			"backpack",
+			"shield",
+			"hat",
+			"halo",
+			"mask",
+			"shoulder",
+			"aura",
+			"trail");
 
 	private static final HalcyonCosmetics INSTANCE = new HalcyonCosmetics();
 
@@ -85,14 +101,14 @@ public final class HalcyonCosmetics {
 
 	private final ConcurrentHashMap<String, int[]> animations = new ConcurrentHashMap<>();
 
-	/** The addresses of the frame pictures, when the owner uploaded one file per frame. */
+	/** The addresses of the frame pictures, when an older build uploaded one file per frame. */
 	private final ConcurrentHashMap<String, List<String>> frameUrls = new ConcurrentHashMap<>();
 
 	private final ConcurrentHashMap<String, Long> retryAt = new ConcurrentHashMap<>();
 
 	private final Set<String> pending = ConcurrentHashMap.newKeySet();
 
-	/** What is worn, one id per slot. */
+	/** What is worn, one id per kind. */
 	private final Map<String, String> worn = new ConcurrentHashMap<>();
 
 	private volatile List<Cape> catalogue = List.of();
@@ -122,10 +138,15 @@ public final class HalcyonCosmetics {
 		return client.getSession() == null ? "" : client.getSession().getUsername();
 	}
 
-	/** The slot a kind of cosmetic occupies. Unknown kinds hang off the back. */
+	/** The place on the body a kind of cosmetic sits. Unknown kinds hang off the back. */
 	public static String slotFor(String kind) {
 		String value = kind == null ? "" : kind.trim().toLowerCase(Locale.ROOT);
 		return SLOTS.getOrDefault(value, "back");
+	}
+
+	/** True when this is a kind the client knows, rather than a place on the body. */
+	public static boolean isKind(String value) {
+		return value != null && SLOTS.containsKey(value.trim().toLowerCase(Locale.ROOT));
 	}
 
 	private void restore() {
@@ -137,7 +158,7 @@ public final class HalcyonCosmetics {
 		String saved = HalcyonConfig.get().equippedCape;
 		String cape = saved == null ? "" : saved.trim();
 		if (!cape.isEmpty()) {
-			worn.put("back", cape);
+			worn.put("cape", cape);
 		}
 	}
 
@@ -220,7 +241,8 @@ public final class HalcyonCosmetics {
 
 	/**
 	 * True when the frames live inside one tall picture rather than in a file each, in which case
-	 * playing it means sliding a window down the strip instead of swapping textures.
+	 * playing it means sliding a window down the strip instead of swapping textures. Everything
+	 * published with an mcmeta is this shape.
 	 */
 	public boolean isStrip(String id) {
 		List<String> urls = frameUrls.get(id);
@@ -232,21 +254,57 @@ public final class HalcyonCosmetics {
 		return id != null && owned.contains(id);
 	}
 
-	/** The cape being worn, kept as its own call because the render mixins ask for it. */
+	/** The cape being worn, kept as its own call because the vanilla cape slot asks for it. */
 	public String equippedId() {
 		restore();
-		return worn.getOrDefault("back", "");
+		return worn.getOrDefault("cape", "");
 	}
 
-	/** What is worn in one slot, empty when the slot is free. */
+	/** What is worn of one kind, empty when nothing of that kind is on. */
+	public String equippedOf(String kind) {
+		restore();
+		if (kind == null || kind.isEmpty()) {
+			return "";
+		}
+		return worn.getOrDefault(kind.trim().toLowerCase(Locale.ROOT), "");
+	}
+
+	/**
+	 * What is worn at one place on the body, for callers that still think in places. Several kinds
+	 * can share a place now, so this answers with the first one found in wardrobe order.
+	 */
 	public String equippedIn(String slot) {
 		restore();
-		return worn.getOrDefault(slot, "");
+		if (slot == null || slot.isEmpty()) {
+			return "";
+		}
+
+		String place = slot.trim().toLowerCase(Locale.ROOT);
+		for (String kind : KINDS) {
+			String id = worn.getOrDefault(kind, "");
+			if (!id.isEmpty() && slotFor(kind).equals(place)) {
+				return id;
+			}
+		}
+		return "";
+	}
+
+	/** Everything being worn right now, keyed by kind, in wardrobe order. */
+	public Map<String, String> wornByKind() {
+		restore();
+		Map<String, String> snapshot = new LinkedHashMap<>();
+		for (String kind : KINDS) {
+			String id = worn.getOrDefault(kind, "");
+			if (!id.isEmpty()) {
+				snapshot.put(kind, id);
+			}
+		}
+		return Map.copyOf(snapshot);
 	}
 
 	/** True when this exact cosmetic is being worn. */
 	public boolean isWearing(String id) {
-		return id != null && !id.isEmpty() && id.equals(equippedIn(slotOf(id)));
+		return id != null && !id.isEmpty() && id.equals(equippedOf(kindOf(id)));
 	}
 
 	/** A short line for the cosmetics screen, empty when everything is fine. */
@@ -297,20 +355,45 @@ public final class HalcyonCosmetics {
 
 	/** Wears a cosmetic, or takes it off when the id is empty. */
 	public void equip(MinecraftClient client, String id) {
-		String value = id == null ? "" : id.trim();
-		equip(client, value, value.isEmpty() ? "back" : slotOf(value));
+		equip(client, id, "");
 	}
 
-	/** Wears a cosmetic in one slot, or empties that slot when the id is empty. */
-	public void equip(MinecraftClient client, String id, String slot) {
+	/**
+	 * Wears a cosmetic, or takes something off when the id is empty.
+	 *
+	 * <p>What is replaced is decided by the cosmetic itself: putting a cape on only ever takes the
+	 * cape that was on off, so wings, a shield and a hat all stay where they are. The second argument
+	 * only matters when taking something off, where it names the kind, or the place on the body when
+	 * a whole place should be cleared.
+	 */
+	public void equip(MinecraftClient client, String id, String which) {
 		String value = id == null ? "" : id.trim();
-		String target = slot == null || slot.isEmpty() ? "back" : slot;
+		String wanted = which == null ? "" : which.trim().toLowerCase(Locale.ROOT);
 		if (!value.isEmpty() && !owned.contains(value)) {
 			status = "That cosmetic was not given to you";
 			return;
 		}
 
-		remember(target, value);
+		String sent;
+		if (!value.isEmpty()) {
+			sent = kindOf(value);
+			remember(sent, value);
+		} else if (isKind(wanted)) {
+			sent = wanted;
+			remember(sent, "");
+		} else if (wanted.isEmpty()) {
+			// Nothing named at all, which only ever meant the cape.
+			sent = "cape";
+			remember(sent, "");
+		} else {
+			// A place on the body, so everything worn there comes off.
+			sent = wanted;
+			for (String kind : KINDS) {
+				if (slotFor(kind).equals(wanted)) {
+					remember(kind, "");
+				}
+			}
+		}
 
 		String base = HalcyonBackend.baseUrl();
 		String name = username(client);
@@ -320,7 +403,8 @@ public final class HalcyonCosmetics {
 
 		JsonObject payload = new JsonObject();
 		payload.addProperty("name", name);
-		payload.addProperty("slot", target);
+		// The server takes either a kind or a place here, and works out the rest itself.
+		payload.addProperty("slot", sent);
 		if (value.isEmpty()) {
 			payload.add("id", JsonNull.INSTANCE);
 		} else {
@@ -403,16 +487,16 @@ public final class HalcyonCosmetics {
 		return Math.max(1, textureHeight(id) / frames(id));
 	}
 
-	private void remember(String slot, String value) {
+	private void remember(String kind, String value) {
 		if (value.isEmpty()) {
-			worn.remove(slot);
+			worn.remove(kind);
 		} else {
-			worn.put(slot, value);
+			worn.put(kind, value);
 		}
 
 		// Only the cape survives a restart on its own; everything else comes back from the
 		// backend on the next refresh, which is the record that matters anyway.
-		if (slot.equals("back")) {
+		if (kind.equals("cape")) {
 			HalcyonConfig config = HalcyonConfig.get();
 			config.equippedCape = value;
 			config.save();
@@ -477,11 +561,13 @@ public final class HalcyonCosmetics {
 									text(entry, "texture")));
 
 							String kind = text(entry, "type");
-							parsedKinds.put(id, kind.isEmpty() ? "cape" : kind);
+							parsedKinds.put(id, isKind(kind) ? kind : "cape");
 
 							List<String> urls = strings(entry, "frameTextures");
 							parsedFrames.put(id, urls);
 
+							// An mcmeta on the record is what makes something animated, and the
+							// server counts the frames of the strip when it is published.
 							boolean animated = bool(entry, "animated");
 							int declared = number(entry, "frames", 1);
 							int count = urls.size() > 1
@@ -546,26 +632,25 @@ public final class HalcyonCosmetics {
 						}
 						owned = Set.copyOf(unlocked);
 
-						// The server keeps one id per slot, and it is the record of what this
-						// player is wearing everywhere, so it replaces whatever is held here.
+						// The server is the record of what this player wears everywhere, so it
+						// replaces whatever is held here. What each id was filed under is
+						// ignored: the kind of the cosmetic itself says where it belongs, which
+						// is what makes this work against an older server too.
 						JsonObject equipped = object.getAsJsonObject("equipped");
 						if (equipped != null) {
-							for (String slot : List.copyOf(worn.keySet())) {
-								if (!equipped.has(slot)) {
-									worn.remove(slot);
-								}
-							}
-							for (String slot : equipped.keySet()) {
-								String id = text(equipped, slot);
-								if (id.isEmpty() || !owned.contains(id)) {
-									worn.remove(slot);
-								} else {
-									worn.put(slot, id);
+							Map<String, String> fresh = new LinkedHashMap<>();
+							for (String key : equipped.keySet()) {
+								String id = text(equipped, key);
+								if (!id.isEmpty() && owned.contains(id)) {
+									fresh.put(kindOf(id), id);
 								}
 							}
 
+							worn.keySet().retainAll(fresh.keySet());
+							worn.putAll(fresh);
+
 							HalcyonConfig config = HalcyonConfig.get();
-							String cape = worn.getOrDefault("back", "");
+							String cape = worn.getOrDefault("cape", "");
 							if (!cape.equals(config.equippedCape)) {
 								config.equippedCape = cape;
 								config.save();
