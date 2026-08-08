@@ -22,11 +22,27 @@ dependencies {
 	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 }
 
+// The launcher's own picture lives once in the repository and is copied into the
+// mod resources here, so the menu background ships with the jar and no player
+// ever has to download or place a file.
+def menuBackground = file('../assets/menu-background.png')
+
 processResources {
 	inputs.property 'version', project.version
 
 	filesMatching('fabric.mod.json') {
 		expand 'version': project.version
+	}
+
+	if (menuBackground.isFile()) {
+		inputs.file menuBackground
+
+		from(menuBackground) {
+			into 'assets/halcyon/textures/gui'
+			rename { 'menu_background.png' }
+		}
+	} else {
+		logger.lifecycle('assets/menu-background.png is missing, the painted menu scene will be used instead')
 	}
 }
 
