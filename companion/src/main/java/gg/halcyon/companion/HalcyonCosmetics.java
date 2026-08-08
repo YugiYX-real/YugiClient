@@ -39,6 +39,15 @@ import java.util.concurrent.ConcurrentHashMap;
  * the same time, and only a second cape takes the first one off. That is why what is worn is kept
  * keyed by the kind rather than by the place on the body: three different kinds hang off the back.
  *
+ * <p>A cosmetic can carry a model as well as a picture. The model is the small list of boxes the
+ * admin panel produced out of the uploaded file, and it is downloaded and kept here so the renderer
+ * can build the piece that was actually drawn rather than a flat panel. Everything in it is measured
+ * in model pixels, sixteen of which make a block.
+ *
+ * <p>How a piece is worn travels with it too: its size, a nudge up or down and off the back in model
+ * pixels, how much it moves, whether a second mirrored copy is drawn and whether it glows. That is
+ * what lets a pair of wings be fixed from the admin panel without shipping a new jar.
+ *
  * <p>Something that moves is one tall png with its frames stacked in it and an animation mcmeta
  * beside it, which is the same pair Minecraft uses for its own animated textures. The record says
  * how many frames there are and how long each one lasts, and the picture is played by sliding a
@@ -89,6 +98,9 @@ public final class HalcyonCosmetics {
 	/** How long to leave a picture alone after a failed download. */
 	private static final long RETRY_MS = 30L * 1000L;
 
+	/** More boxes than this in one piece is a mistake rather than a model. */
+	private static final int MAX_BOXES = 128;
+
 	private final HttpClient http =
 			HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 
@@ -103,6 +115,16 @@ public final class HalcyonCosmetics {
 
 	/** The addresses of the frame pictures, when an older build uploaded one file per frame. */
 	private final ConcurrentHashMap<String, List<String>> frameUrls = new ConcurrentHashMap<>();
+
+	/** The address of the model file of each cosmetic, empty when the piece is worn flat. */
+	private final ConcurrentHashMap<String, String> modelUrls = new ConcurrentHashMap<>();
+
+	/** The boxes of each cosmetic, once its model file has been read. */
+	private final ConcurrentHashMap<String, HalcyonCosmeticModel.Shape> shapes =
+			new ConcurrentHashMap<>();
+
+	/** How each piece is worn: size, three nudges in model pixels, movement, mirroring, glow. */
+	private final ConcurrentHashMap<String, float[]> geometry = new ConcurrentHashMap<>();
 
 	private final ConcurrentHashMap<String, Long> retryAt = new ConcurrentHashMap<>();
 
@@ -252,6 +274,77 @@ public final class HalcyonCosmetics {
 
 	public boolean isOwned(String id) {
 		return id != null && owned.contains(id);
+	}
+
+	/**
+	 * The boxes this cosmetic is built from, or null when it is worn flat or the model has not been
+	 * read yet. Asking for a model that has not arrived starts the download, so calling this every
+	 * frame is the intended use.
+	 */
+	public HalcyonCosmeticModel.Shape shape(String id) {
+		if (id == null || id.isEmpty()) {
+			return null;
+		}
+
+		HalcyonCosmeticModel.Shape known = shapes.get(id);
+		if (known != null) {
+			return known;
+		}
+
+		String url = modelUrls.getOrDefault(id, "");
+		if (!url.isEmpty()) {
+			fetchModel(id, url);
+		}
+		return null;
+	}
+
+	/** True when a model was published for this cosmetic, whether or not it has arrived yet. */
+	public boolean hasModel(String id) {
+		return id != null && !modelUrls.getOrDefault(id, "").isEmpty();
+	}
+
+	/** How much bigger or smaller than drawn the piece is worn. */
+	public float scaleOf(String id) {
+		float value = geometryAt(id, 0, 1.0F);
+		return value > 0.0F ? value : 1.0F;
+	}
+
+	/** Nudge sideways, in model pixels. */
+	public float offsetXOf(String id) {
+		return geometryAt(id, 1, 0.0F);
+	}
+
+	/** Nudge up or down, in model pixels. Larger is lower, as everywhere in model space. */
+	public float offsetYOf(String id) {
+		return geometryAt(id, 2, 0.0F);
+	}
+
+	/** Nudge off the back, in model pixels. */
+	public float offsetZOf(String id) {
+		return geometryAt(id, 3, 0.0F);
+	}
+
+	/** How much the piece moves while walking, or a negative number to leave it to the kind. */
+	public float flapOf(String id) {
+		return geometryAt(id, 4, -1.0F);
+	}
+
+	/** 1 to draw a second mirrored copy, 0 for one copy, -1 to leave it to the kind. */
+	public int mirrorOf(String id) {
+		return Math.round(geometryAt(id, 5, -1.0F));
+	}
+
+	/** 1 when the piece is lit in the dark, 0 when it is not, -1 to leave it to the kind. */
+	public int glowOf(String id) {
+		return Math.round(geometryAt(id, 6, -1.0F));
+	}
+
+	private float geometryAt(String id, int index, float fallback) {
+		float[] values = id == null ? null : geometry.get(id);
+		if (values == null || index >= values.length) {
+			return fallback;
+		}
+		return values[index];
 	}
 
 	/** The cape being worn, kept as its own call because the vanilla cape slot asks for it. */
@@ -540,6 +633,8 @@ public final class HalcyonCosmetics {
 						Map<String, String> parsedKinds = new LinkedHashMap<>();
 						Map<String, int[]> parsedAnimations = new LinkedHashMap<>();
 						Map<String, List<String>> parsedFrames = new LinkedHashMap<>();
+						Map<String, String> parsedModels = new LinkedHashMap<>();
+						Map<String, float[]> parsedGeometry = new LinkedHashMap<>();
 
 						for (JsonElement element : array) {
 							if (!element.isJsonObject()) {
@@ -562,6 +657,21 @@ public final class HalcyonCosmetics {
 
 							String kind = text(entry, "type");
 							parsedKinds.put(id, isKind(kind) ? kind : "cape");
+
+							// The model file the admin panel produced, and how the piece is worn.
+							// Both travel with the record so a wing can be fixed from the panel.
+							parsedModels.put(id, text(entry, "model"));
+							parsedGeometry.put(
+									id,
+									new float[] {
+										decimal(entry, "scale", 1.0F),
+										decimal(entry, "offsetX", 0.0F),
+										decimal(entry, "offsetY", 0.0F),
+										decimal(entry, "offsetZ", 0.0F),
+										decimal(entry, "flap", -1.0F),
+										flag(entry, "mirror"),
+										flag(entry, "glow")
+									});
 
 							List<String> urls = strings(entry, "frameTextures");
 							parsedFrames.put(id, urls);
@@ -586,6 +696,15 @@ public final class HalcyonCosmetics {
 							}
 						}
 
+						// The same goes for a model that was published again under a new address.
+						for (Map.Entry<String, String> fresh : parsedModels.entrySet()) {
+							String previous = modelUrls.get(fresh.getKey());
+							if (previous != null && !previous.equals(fresh.getValue())) {
+								shapes.remove(fresh.getKey());
+								retryAt.remove("model#" + fresh.getKey());
+							}
+						}
+
 						catalogue = List.copyOf(parsed);
 						kinds.keySet().retainAll(parsedKinds.keySet());
 						kinds.putAll(parsedKinds);
@@ -593,6 +712,11 @@ public final class HalcyonCosmetics {
 						animations.putAll(parsedAnimations);
 						frameUrls.keySet().retainAll(parsedFrames.keySet());
 						frameUrls.putAll(parsedFrames);
+						modelUrls.keySet().retainAll(parsedModels.keySet());
+						modelUrls.putAll(parsedModels);
+						geometry.keySet().retainAll(parsedGeometry.keySet());
+						geometry.putAll(parsedGeometry);
+						shapes.keySet().retainAll(parsedModels.keySet());
 						status = "";
 					} catch (RuntimeException parseError) {
 						HalcyonCompanion.LOGGER.debug("The Halcyon cosmetics list could not be parsed");
@@ -672,6 +796,103 @@ public final class HalcyonCosmetics {
 			if (!textures.containsKey(key(cape.id(), index))) {
 				fetchFrame(cape.id(), index, wanted.get(index));
 			}
+		}
+	}
+
+	/**
+	 * Pulls the model file of one cosmetic.
+	 *
+	 * <p>This is plain json rather than a picture, so it does not need the render thread and is kept
+	 * as soon as it arrives. A file that cannot be read is left alone for a while rather than asked
+	 * for again on the next frame.
+	 */
+	private void fetchModel(String id, String model) {
+		String slot = "model#" + id;
+		Long wait = retryAt.get(slot);
+		if (wait != null && System.currentTimeMillis() < wait) {
+			return;
+		}
+
+		String url = address(model);
+		if (url == null) {
+			return;
+		}
+		if (!pending.add(slot)) {
+			return;
+		}
+
+		HttpRequest get = request(url).GET().build();
+		http.sendAsync(get, HttpResponse.BodyHandlers.ofString())
+				.whenComplete((response, error) -> {
+					try {
+						if (error != null || response == null || response.statusCode() != 200) {
+							retryAt.put(slot, System.currentTimeMillis() + RETRY_MS);
+							return;
+						}
+
+						HalcyonCosmeticModel.Shape shape = parseShape(response.body());
+						if (shape == null) {
+							retryAt.put(slot, System.currentTimeMillis() + RETRY_MS);
+							HalcyonCompanion.LOGGER.warn(
+									"The model of the Halcyon cosmetic {} could not be read", id);
+							return;
+						}
+
+						shapes.put(id, shape);
+						retryAt.remove(slot);
+					} finally {
+						pending.remove(slot);
+					}
+				});
+	}
+
+	/** Reads the published model into boxes, or null when there is nothing usable in it. */
+	private static HalcyonCosmeticModel.Shape parseShape(String body) {
+		try {
+			JsonElement root = JsonParser.parseString(body);
+			if (!root.isJsonObject()) {
+				return null;
+			}
+
+			JsonObject object = root.getAsJsonObject();
+			JsonArray cubes = object.getAsJsonArray("cubes");
+			if (cubes == null) {
+				return null;
+			}
+
+			List<HalcyonCosmeticModel.Box> boxes = new ArrayList<>();
+			for (JsonElement element : cubes) {
+				if (!element.isJsonObject()) {
+					continue;
+				}
+
+				JsonObject cube = element.getAsJsonObject();
+				boxes.add(new HalcyonCosmeticModel.Box(
+						text(cube, "name"),
+						decimal(cube, "x", 0.0F),
+						decimal(cube, "y", 0.0F),
+						decimal(cube, "z", 0.0F),
+						decimal(cube, "width", 0.0F),
+						decimal(cube, "height", 0.0F),
+						decimal(cube, "depth", 0.0F),
+						decimal(cube, "u", 0.0F),
+						decimal(cube, "v", 0.0F)));
+
+				if (boxes.size() >= MAX_BOXES) {
+					break;
+				}
+			}
+
+			if (boxes.isEmpty()) {
+				return null;
+			}
+
+			return new HalcyonCosmeticModel.Shape(
+					Math.max(1, number(object, "textureWidth", 64)),
+					Math.max(1, number(object, "textureHeight", 64)),
+					List.copyOf(boxes));
+		} catch (RuntimeException error) {
+			return null;
 		}
 	}
 
@@ -807,6 +1028,19 @@ public final class HalcyonCosmetics {
 		}
 	}
 
+	/** A yes or no that can also be missing, which means "leave it to the kind". */
+	private static float flag(JsonObject object, String key) {
+		JsonElement value = object.get(key);
+		if (value == null || value.isJsonNull() || !value.isJsonPrimitive()) {
+			return -1.0F;
+		}
+		try {
+			return value.getAsBoolean() ? 1.0F : 0.0F;
+		} catch (RuntimeException error) {
+			return -1.0F;
+		}
+	}
+
 	private static int number(JsonObject object, String key, int fallback) {
 		JsonElement value = object.get(key);
 		if (value == null || value.isJsonNull() || !value.isJsonPrimitive()) {
@@ -814,6 +1048,18 @@ public final class HalcyonCosmetics {
 		}
 		try {
 			return value.getAsInt();
+		} catch (RuntimeException error) {
+			return fallback;
+		}
+	}
+
+	private static float decimal(JsonObject object, String key, float fallback) {
+		JsonElement value = object.get(key);
+		if (value == null || value.isJsonNull() || !value.isJsonPrimitive()) {
+			return fallback;
+		}
+		try {
+			return value.getAsFloat();
 		} catch (RuntimeException error) {
 			return fallback;
 		}
