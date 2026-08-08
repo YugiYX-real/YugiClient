@@ -3,6 +3,7 @@ package gg.halcyon.companion;
 import java.lang.ref.WeakReference;
 import java.util.HashMap;
 import java.util.Map;
+import net.minecraft.client.model.ModelPart;
 import net.minecraft.client.render.command.OrderedRenderCommandQueue;
 import net.minecraft.client.render.entity.feature.FeatureRenderer;
 import net.minecraft.client.render.entity.feature.FeatureRendererContext;
@@ -28,14 +29,18 @@ import net.minecraft.util.math.RotationAxis;
  * what the matrix wants. Vanilla does the same thing when it puts a cape two pixels off the back,
  * which it writes as 0.125.
  *
- * <p><b>Shape.</b> A cosmetic published with a model is built out of exactly the boxes that were
- * drawn for it. Only a cosmetic with no model at all falls back to a flat panel, and only that
- * fallback is scaled to a sensible size, because a real model is already the size it was drawn at.
+ * <p><b>Where it hangs.</b> A cosmetic is attached to the part of the player it belongs to rather
+ * than to the player as a whole. A hat, a halo and a mask ride the head, so they turn and tilt when
+ * the player looks around; everything else rides the torso, so it leans over when the player sneaks
+ * or swims instead of staying bolt upright in the air behind them. This is what vanilla does with a
+ * cape and an elytra, and it is the difference between a piece that is worn and a piece that
+ * follows the player around.
  *
- * <p>Two rules keep a cosmetic looking attached rather than floating. It is anchored to a point on
- * the body rather than somewhere above it, and anything worn on the body only moves when the player
- * moves. A halo, an aura and a trail are the exceptions, because drifting on their own is the whole
- * point of them.
+ * <p><b>Shape.</b> A cosmetic published with a model is built out of exactly the boxes that were
+ * drawn for it. A piece that never had a model is drawn as a flat panel. A piece that has a model
+ * which has not been downloaded yet is not drawn at all for the moment: showing the picture
+ * stretched over a square instead is what looks like a broken texture floating near the player,
+ * and it is better to show nothing for the half second the file takes to arrive.
  */
 public final class HalcyonCosmeticFeature
 		extends FeatureRenderer<PlayerEntityRenderState, PlayerEntityModel> {
@@ -53,7 +58,7 @@ public final class HalcyonCosmeticFeature
 
 	private static volatile WeakReference<Object> wearer = new WeakReference<>(null);
 
-	/** The flat panel worn by anything published without a model. */
+	/** The flat panel worn by anything published without a model at all. */
 	private final HalcyonCosmeticModel panel;
 
 	/** One built model per cosmetic and frame. Only ever touched on the render thread. */
@@ -130,9 +135,13 @@ public final class HalcyonCosmeticFeature
 		HalcyonCosmetics cosmetics = HalcyonCosmetics.get();
 		float[] place = placement(kind);
 
-		// The piece as it was published, when its model has arrived. Until then it is drawn flat,
-		// which is also what a cosmetic that never had a model looks like.
+		// The piece as it was published. A model that has been announced but not downloaded yet is
+		// waited for rather than faked, because the fake is a flat picture in mid air.
 		HalcyonCosmeticModel.Shape shape = cosmetics.shape(id);
+		if (shape == null && cosmetics.hasModel(id)) {
+			return;
+		}
+
 		HalcyonCosmeticModel worn = panel;
 		if (shape != null) {
 			int frames = cosmetics.frames(id);
@@ -175,9 +184,16 @@ public final class HalcyonCosmeticFeature
 		float anchorY = place[1] + cosmetics.offsetYOf(id);
 		float anchorZ = place[2] + cosmetics.offsetZOf(id);
 
+		// The part of the player this kind rides on. Everything below is measured from that part,
+		// which is why a sneaking player takes their wings with them.
+		ModelPart mount = mountFor(kind);
+
 		for (int copy = 0; copy < copies; copy++) {
 			float side = copies == 1 ? 0.0F : (copy == 0 ? -1.0F : 1.0F);
 			matrices.push();
+			if (mount != null) {
+				mount.applyTransform(matrices);
+			}
 			// Pixels into blocks. Without this every one of these numbers is sixteen times too
 			// large, which is exactly how a pair of wings ends up a block under the ground and two
 			// blocks behind the player.
@@ -193,6 +209,25 @@ public final class HalcyonCosmeticFeature
 			matrices.scale(size, size, size);
 			renderModel(worn, texture, matrices, queue, brightness, state, WHITE, 0);
 			matrices.pop();
+		}
+	}
+
+	/**
+	 * The part of the player a kind of cosmetic is attached to.
+	 *
+	 * <p>Attaching to a part rather than to the player means the piece inherits that part's turn and
+	 * lean for free, so it behaves while sneaking, swimming and riding without a single line here
+	 * knowing about any of those.
+	 */
+	private ModelPart mountFor(String kind) {
+		PlayerEntityModel model = getContextModel();
+		switch (kind) {
+			case "hat":
+			case "halo":
+			case "mask":
+				return model.head;
+			default:
+				return model.body;
 		}
 	}
 
@@ -236,8 +271,9 @@ public final class HalcyonCosmeticFeature
 	 * is, and how many copies to draw.
 	 *
 	 * <p>Entity model space is upside down, so a smaller y sits higher on the body, and z grows
-	 * towards the player's back. The neck is y 0, the top of the head is y -8, the hips are y 12 and
-	 * the feet are y 24. The back of the body is z 2 and the face is z -4.
+	 * towards the player's back. Measured from the part the piece rides on: the head pivot and the
+	 * torso pivot are both at the neck, so y 0 is the neck, the top of the head is y -8, the hips
+	 * are y 12 and the feet are y 24. The back of the body is z 2 and the face is z -4.
 	 *
 	 * <p>These are anchors, not positions. A model is drawn around the origin in Blockbench, and the
 	 * anchor is the point on the body that origin is pinned to, so a piece ends up where it was
