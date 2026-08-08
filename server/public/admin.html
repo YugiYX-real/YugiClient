@@ -170,25 +170,28 @@
 
 						<div class="inline">
 							<div class="field">
-								<label for="c-model">Model, .bbmodel .json .gltf or .glb</label>
+								<label for="c-model">Model, .bbmodel .json .geo.json .jem .gltf or .glb</label>
 								<input
 									id="c-model"
 									type="file"
-									accept=".bbmodel,.json,.gltf,.glb,application/json,model/gltf+json,model/gltf-binary"
+									accept=".bbmodel,.json,.geo.json,.jem,.jpm,.gltf,.glb,application/json,model/gltf+json,model/gltf-binary"
 									multiple
 								/>
 								<div class="hint">
-									Save straight out of Blockbench. The boxes are read here in the browser
-									and stored in the small shape the client builds from, so the game never
-									has to understand Blockbench. Set the project to box uv and the piece
-									comes out exactly as you drew it. A piece drawn as several modules, a
-									left wing and a right wing and a harness, can be picked all at once and
-									they are joined into one model. Every module has to be drawn against the
-									same texture sheet, because the piece wears one png. A .gltf or a .glb is
-									taken as well, with one honest caveat: glTF is a triangle mesh and the
-									game builds boxes, so every mesh part comes across as the box it fits
-									inside. A piece built from a handful of parts survives that well, a
-									single sculpted mesh does not.
+									Save straight out of Blockbench, in whichever format the project uses. A
+									.bbmodel, a Java model .json, a Bedrock geometry .json with its bones and
+									cubes, and an OptiFine .jem are all read, because those four keep their
+									boxes in four different places and a wing arrives as any of them. The
+									boxes are read here in the browser and stored in the small shape the
+									client builds from, so the game never has to understand Blockbench. Set
+									the project to box uv and the piece comes out exactly as you drew it. A
+									piece drawn as several modules, a left wing and a right wing and a
+									harness, can be picked all at once and they are joined into one model.
+									Every module has to be drawn against the same texture sheet, because the
+									piece wears one png. A .gltf or a .glb is taken as well, with one honest
+									caveat: glTF is a triangle mesh and the game builds boxes, so every mesh
+									part comes across as the box it fits inside. A piece built from a handful
+									of parts survives that well, a single sculpted mesh does not.
 								</div>
 							</div>
 							<div class="field">
@@ -199,7 +202,9 @@
 									needs no model at all, just the usual 64x32 sheet. Pick several pngs and
 									they are stacked here into the one tall strip an animation is, in the
 									order they are listed below, so a frame by frame animation needs no image
-									editor. Every frame has to be the same size.
+									editor. Frames saved at different sizes are fitted onto the largest one
+									rather than refused, sharply where the sizes double and centred where
+									they do not.
 								</div>
 							</div>
 							<div class="field">
@@ -226,11 +231,35 @@
 
 						<div class="card" style="margin-top: 0.9rem">
 							<div class="row">
-								<canvas id="c-canvas" width="220" height="220" class="preview"></canvas>
+								<canvas
+									id="c-canvas"
+									width="340"
+									height="340"
+									style="
+										width: 340px;
+										height: 340px;
+										max-width: 100%;
+										border-radius: 9px;
+										border: 1px solid rgba(232, 236, 245, 0.09);
+										background:
+											radial-gradient(circle at 50% 35%, rgba(124, 92, 255, 0.14), transparent 65%),
+											rgba(9, 9, 18, 0.55);
+										image-rendering: pixelated;
+										touch-action: none;
+									"
+								></canvas>
 								<div>
 									<strong>Preview</strong>
 									<div class="hint" id="c-preview" style="margin-top: 0.4rem">
 										Pick a model and a texture to see it before anyone can wear it.
+									</div>
+									<div class="hint" style="margin-top: 0.5rem">
+										The piece turns on its own and can be dragged with the mouse. The faint
+										figure is a player at true size, drawn to the same pixels the game uses,
+										so how big the piece is and how far it stands off the back are both
+										visible before anybody is given it. It is not Blockbench and is not
+										trying to be: it draws the same boxes with the same texture the game
+										will, with no lighting on them.
 									</div>
 								</div>
 							</div>

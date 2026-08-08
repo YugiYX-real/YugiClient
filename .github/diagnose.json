@@ -1,4 +1,4 @@
 {
-	"requestedAt": "2026-08-08T17:55:00Z",
-	"reason": "Lint the model reader that now finds boxes in bedrock geometry, jem and mesh files as well"
+	"requestedAt": "2026-08-08T18:25:00Z",
+	"reason": "Lint the turnable preview, the wider model reader and the admin panel that drives them"
 }
