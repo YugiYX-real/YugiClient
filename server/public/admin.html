@@ -65,7 +65,7 @@
 						<div class="inline" style="margin-top: 0.9rem">
 							<div class="field">
 								<label for="u-version">Version</label>
-								<input id="u-version" placeholder="1.2.7" />
+								<input id="u-version" placeholder="1.2.8" />
 							</div>
 							<div class="field">
 								<label for="u-notes">What changed</label>
@@ -170,8 +170,13 @@
 
 						<div class="inline">
 							<div class="field">
-								<label for="c-model">Model, .bbmodel or .json</label>
-								<input id="c-model" type="file" accept=".bbmodel,.json,application/json" multiple />
+								<label for="c-model">Model, .bbmodel .json .gltf or .glb</label>
+								<input
+									id="c-model"
+									type="file"
+									accept=".bbmodel,.json,.gltf,.glb,application/json,model/gltf+json,model/gltf-binary"
+									multiple
+								/>
 								<div class="hint">
 									Save straight out of Blockbench. The boxes are read here in the browser
 									and stored in the small shape the client builds from, so the game never
@@ -179,26 +184,43 @@
 									comes out exactly as you drew it. A piece drawn as several modules, a
 									left wing and a right wing and a harness, can be picked all at once and
 									they are joined into one model. Every module has to be drawn against the
-									same texture sheet, because the piece wears one png.
+									same texture sheet, because the piece wears one png. A .gltf or a .glb is
+									taken as well, with one honest caveat: glTF is a triangle mesh and the
+									game builds boxes, so every mesh part comes across as the box it fits
+									inside. A piece built from a handful of parts survives that well, a
+									single sculpted mesh does not.
 								</div>
 							</div>
 							<div class="field">
 								<label for="c-file">Texture, .png</label>
-								<input id="c-file" type="file" accept="image/png" />
+								<input id="c-file" type="file" accept="image/png" multiple />
 								<div class="hint">
 									The texture the model is painted with. Transparency is kept. A cape
-									needs no model at all, just the usual 64x32 sheet.
+									needs no model at all, just the usual 64x32 sheet. Pick several pngs and
+									they are stacked here into the one tall strip an animation is, in the
+									order they are listed below, so a frame by frame animation needs no image
+									editor. Every frame has to be the same size.
 								</div>
 							</div>
 							<div class="field">
 								<label for="c-mcmeta">Animation, .mcmeta</label>
 								<input id="c-mcmeta" type="file" accept=".mcmeta,.json,application/json" />
 								<div class="hint">
-									Only for something that moves. Stack the frames down the png, one under
-									the other, each as tall as the sheet the model was drawn against, and
-									pick the mcmeta that belongs beside it. It is the ordinary Minecraft
-									file, so <code>{"animation":{"frametime":2}}</code> is a complete one.
+									Only needed to choose the speed. It is the ordinary Minecraft file, so
+									<code>{"animation":{"frametime":2}}</code> is a complete one. Frames
+									stacked here get one written for them at two ticks a frame, so this can
+									be left empty.
 								</div>
+							</div>
+						</div>
+
+						<div class="field" style="margin-top: 0.9rem">
+							<label>Picked files</label>
+							<div class="card scroll" id="c-files"></div>
+							<div class="hint">
+								Picking again adds to this list rather than replacing it, so frames can be
+								gathered from several folders. Remove takes one file back out without
+								starting over. Only what is listed here is uploaded.
 							</div>
 						</div>
 
@@ -220,12 +242,12 @@
 								<input id="c-scale" type="number" min="0.1" max="4" step="0.05" placeholder="kind default" />
 							</div>
 							<div class="field">
-								<label for="c-offset-y">Up or down</label>
-								<input id="c-offset-y" type="number" min="-2" max="2" step="0.05" placeholder="kind default" />
+								<label for="c-offset-y">Up or down, in pixels</label>
+								<input id="c-offset-y" type="number" min="-32" max="32" step="0.5" placeholder="0" />
 							</div>
 							<div class="field">
-								<label for="c-offset-z">Off the back</label>
-								<input id="c-offset-z" type="number" min="-2" max="2" step="0.05" placeholder="kind default" />
+								<label for="c-offset-z">Off the back, in pixels</label>
+								<input id="c-offset-z" type="number" min="-32" max="32" step="0.5" placeholder="0" />
 							</div>
 							<div class="field">
 								<label for="c-flap">Movement</label>
@@ -251,10 +273,10 @@
 							</div>
 						</div>
 						<div class="hint">
-							A model is worn where it was drawn, so leave these alone unless a particular
-							piece needs nudging. Draw wings as a complete pair with the mirror box on no,
-							and keep everything close to the body so it sits on the player rather than
-							floating behind it.
+							A model is worn exactly where it was drawn, hung from the back of the neck,
+							which is the origin in Blockbench. These two nudges are counted in model
+							pixels, sixteen to a block, so two is a small shift and sixteen is a whole
+							block. Draw wings as a complete pair with the mirror box on no.
 						</div>
 						<div class="row">
 							<button class="button primary" id="publish">Publish cosmetic</button>
@@ -264,7 +286,7 @@
 				</section>
 
 				<section class="section">
-					<div class="section-head"><h2>Cosmetics</h2></div>
+					<div class="section-head"><h2>Cosmetics</h2><p>Every file each one is made of</p></div>
 					<div id="cosmetics"></div>
 				</section>
 
