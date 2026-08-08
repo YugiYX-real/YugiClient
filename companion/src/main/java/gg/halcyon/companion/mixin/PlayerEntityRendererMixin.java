@@ -1,5 +1,6 @@
 package gg.halcyon.companion.mixin;
 
+import gg.halcyon.companion.HalcyonCosmeticFeature;
 import gg.halcyon.companion.HalcyonCosmetics;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.render.entity.PlayerEntityRenderer;
@@ -14,11 +15,11 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * Puts the Halcyon cape on the player.
+ * Puts the Halcyon cape on the player and marks whose render state wears our cosmetics.
  *
- * <p>The render state carries the skin textures the renderer is about to use, so swapping the cape
- * entry there is enough: no model, no feature renderer and no vanilla behaviour has to change. Only
- * the local player is touched, because the backend hands cosmetics out per account.
+ * <p>The cape slot expects a vanilla cape sheet, so only cosmetics of the cape kind are allowed to
+ * take it over. Wings, backpacks, hats and every other kind are square pictures and are drawn by
+ * {@link HalcyonCosmeticFeature} instead, which is why they used to come out as a smeared cape.
  */
 @Mixin(PlayerEntityRenderer.class)
 public abstract class PlayerEntityRendererMixin {
@@ -36,7 +37,15 @@ public abstract class PlayerEntityRendererMixin {
 			return;
 		}
 
-		Identifier cape = HalcyonCosmetics.get().capeTexture();
+		HalcyonCosmeticFeature.mark(state);
+
+		HalcyonCosmetics cosmetics = HalcyonCosmetics.get();
+		String worn = cosmetics.equippedIn("back");
+		if (worn == null || worn.isEmpty() || !"cape".equals(cosmetics.kindOf(worn))) {
+			return;
+		}
+
+		Identifier cape = cosmetics.capeTexture();
 		if (cape == null) {
 			return;
 		}
