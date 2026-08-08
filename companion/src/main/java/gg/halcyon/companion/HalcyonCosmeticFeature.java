@@ -1,6 +1,7 @@
 package gg.halcyon.companion;
 
 import java.lang.ref.WeakReference;
+import java.util.HashMap;
 import java.util.Map;
 import net.minecraft.client.render.command.OrderedRenderCommandQueue;
 import net.minecraft.client.render.entity.feature.FeatureRenderer;
@@ -19,6 +20,18 @@ import net.minecraft.util.math.RotationAxis;
  * body, and one of every kind is worn at a time, so a pair of wings and a shield and a hat are all
  * drawn on the same player.
  *
+ * <p><b>Units.</b> There are two of them here and mixing them up is what made wings appear tiny,
+ * below the ground and a long way behind the player. The matrix a feature renderer is handed is
+ * measured in blocks: one whole step of it is a metre. The boxes of a model are measured in model
+ * pixels, sixteen to a block, because a model part divides them by sixteen itself. Every number in
+ * this file is written in model pixels, and {@link #PIXEL} is the only place they are turned into
+ * what the matrix wants. Vanilla does the same thing when it puts a cape two pixels off the back,
+ * which it writes as 0.125.
+ *
+ * <p><b>Shape.</b> A cosmetic published with a model is built out of exactly the boxes that were
+ * drawn for it. Only a cosmetic with no model at all falls back to a flat panel, and only that
+ * fallback is scaled to a sensible size, because a real model is already the size it was drawn at.
+ *
  * <p>Two rules keep a cosmetic looking attached rather than floating. It is anchored to a point on
  * the body rather than somewhere above it, and anything worn on the body only moves when the player
  * moves. A halo, an aura and a trail are the exceptions, because drifting on their own is the whole
@@ -29,17 +42,30 @@ public final class HalcyonCosmeticFeature
 	private static final int WHITE = 0xFFFFFFFF;
 	private static final int FULL_BRIGHT = 0xF000F0;
 
+	/** One model pixel, in the block sized units the matrix works in. */
+	private static final float PIXEL = 1.0F / 16.0F;
+
+	/** How far apart the two copies of a mirrored pair sit, in model pixels. */
+	private static final float SPREAD = 5.0F;
+
 	/** How long one drift takes for the kinds that are meant to float. */
 	private static final long DRIFT_PERIOD_MS = 4200L;
 
 	private static volatile WeakReference<Object> wearer = new WeakReference<>(null);
 
-	private final HalcyonCosmeticModel model;
+	/** The flat panel worn by anything published without a model. */
+	private final HalcyonCosmeticModel panel;
+
+	/** One built model per cosmetic and frame. Only ever touched on the render thread. */
+	private final Map<String, HalcyonCosmeticModel> built = new HashMap<>();
+
+	/** The shape each cached model was built from, so a republished piece is rebuilt. */
+	private final Map<String, HalcyonCosmeticModel.Shape> sources = new HashMap<>();
 
 	public HalcyonCosmeticFeature(
 			FeatureRendererContext<PlayerEntityRenderState, PlayerEntityModel> context) {
 		super(context);
-		this.model = HalcyonCosmeticModel.create(getContextModel()::getLayer);
+		this.panel = HalcyonCosmeticModel.create(getContextModel()::getLayer);
 	}
 
 	/**
@@ -78,7 +104,16 @@ public final class HalcyonCosmeticFeature
 			if (texture == null) {
 				continue;
 			}
-			paint(matrices, queue, light, state, texture, kind, limbAngle, limbDistance);
+			paint(
+					matrices,
+					queue,
+					light,
+					state,
+					texture,
+					kind,
+					entry.getValue(),
+					limbAngle,
+					limbDistance);
 		}
 	}
 
@@ -89,11 +124,32 @@ public final class HalcyonCosmeticFeature
 			PlayerEntityRenderState state,
 			Identifier texture,
 			String kind,
+			String id,
 			float limbAngle,
 			float limbDistance) {
+		HalcyonCosmetics cosmetics = HalcyonCosmetics.get();
 		float[] place = placement(kind);
-		int brightness = glows(kind) ? FULL_BRIGHT : light;
-		float liveliness = place[4];
+
+		// The piece as it was published, when its model has arrived. Until then it is drawn flat,
+		// which is also what a cosmetic that never had a model looks like.
+		HalcyonCosmeticModel.Shape shape = cosmetics.shape(id);
+		HalcyonCosmeticModel worn = panel;
+		if (shape != null) {
+			int frames = cosmetics.frames(id);
+			int frame = cosmetics.isStrip(id) ? cosmetics.frameAt(id, System.currentTimeMillis()) : 0;
+			worn = modelFor(id, shape, frames, frame);
+		}
+
+		// A drawn model is worn at the size it was drawn at. Only the fallback panel is resized,
+		// because a flat 24 pixel square has no size of its own to respect.
+		float size = (shape == null ? place[3] : 1.0F) * cosmetics.scaleOf(id);
+
+		int glow = cosmetics.glowOf(id);
+		boolean lit = glow == -1 ? glows(kind) : glow == 1;
+		int brightness = lit ? FULL_BRIGHT : light;
+
+		float flap = cosmetics.flapOf(id);
+		float liveliness = flap < 0.0F ? place[4] : flap;
 
 		// Walking swings the piece; standing still leaves it alone. This is the whole difference
 		// between wings that are worn and wings that hover.
@@ -110,23 +166,60 @@ public final class HalcyonCosmeticFeature
 											* 2.0);
 		}
 
-		int copies = Math.max(1, (int) place[5]);
+		int mirror = cosmetics.mirrorOf(id);
+		int copies = mirror == -1 ? Math.max(1, (int) place[5]) : (mirror == 1 ? 2 : 1);
+
+		// The nudges from the admin panel are in model pixels too, so a piece can be pulled onto the
+		// back without anybody touching this file.
+		float anchorX = place[0] + cosmetics.offsetXOf(id);
+		float anchorY = place[1] + cosmetics.offsetYOf(id);
+		float anchorZ = place[2] + cosmetics.offsetZOf(id);
+
 		for (int copy = 0; copy < copies; copy++) {
 			float side = copies == 1 ? 0.0F : (copy == 0 ? -1.0F : 1.0F);
 			matrices.push();
+			// Pixels into blocks. Without this every one of these numbers is sixteen times too
+			// large, which is exactly how a pair of wings ends up a block under the ground and two
+			// blocks behind the player.
 			matrices.translate(
-					place[0] + side * 6.0F,
-					place[1] + drift * liveliness * 1.2F,
-					place[2]);
-			// A shoulder buddy sits to one side, so a pair is turned outwards. Everything else is
-			// only turned by how much the player is actually moving.
+					(anchorX + side * SPREAD) * PIXEL,
+					(anchorY + drift * liveliness * 1.2F) * PIXEL,
+					anchorZ * PIXEL);
+			// A mirrored pair is turned outwards. Everything else is only turned by how much the
+			// player is actually moving.
 			matrices.multiply(
 					RotationAxis.POSITIVE_Y.rotationDegrees(
 							side * 18.0F + (stride + drift * 0.4F) * liveliness * 9.0F));
-			matrices.scale(place[3], place[3], place[3]);
-			renderModel(model, texture, matrices, queue, brightness, state, WHITE, 0);
+			matrices.scale(size, size, size);
+			renderModel(worn, texture, matrices, queue, brightness, state, WHITE, 0);
 			matrices.pop();
 		}
+	}
+
+	/**
+	 * The built model for one cosmetic and one frame of its picture.
+	 *
+	 * <p>Building a model means building its boxes, so it is done once per frame of the animation
+	 * and then kept. A cosmetic that was published again arrives with a different shape, and every
+	 * model cached for it is thrown away rather than left showing the old piece.
+	 */
+	private HalcyonCosmeticModel modelFor(
+			String id, HalcyonCosmeticModel.Shape shape, int frames, int frame) {
+		if (sources.get(id) != shape) {
+			sources.put(id, shape);
+			built.keySet().removeIf(entry -> entry.startsWith(id + "#"));
+		}
+
+		String key = id + "#" + frame;
+		HalcyonCosmeticModel known = built.get(key);
+		if (known != null) {
+			return known;
+		}
+
+		HalcyonCosmeticModel made =
+				HalcyonCosmeticModel.of(shape, frames, frame, getContextModel()::getLayer);
+		built.put(key, made);
+		return made;
 	}
 
 	private static boolean glows(String kind) {
@@ -139,40 +232,43 @@ public final class HalcyonCosmeticFeature
 	}
 
 	/**
-	 * Placement per cosmetic kind: x, y, z, scale, liveliness and how many copies to draw.
+	 * Where each kind hangs, in model pixels: x, y, z, the size of the fallback panel, how lively it
+	 * is, and how many copies to draw.
 	 *
 	 * <p>Entity model space is upside down, so a smaller y sits higher on the body, and z grows
-	 * towards the player's back. The body runs from the neck at y 0 down to the hips at y 12, and its
-	 * back is at z 2, which is why anything worn on the back starts just below zero rather than above
-	 * it.
+	 * towards the player's back. The neck is y 0, the top of the head is y -8, the hips are y 12 and
+	 * the feet are y 24. The back of the body is z 2 and the face is z -4.
 	 *
-	 * <p>Three kinds hang off the back and can be worn together, so they are staggered in z: the cape
-	 * is the vanilla one closest to the body, wings sit just behind it, and a shield and a backpack
-	 * sit behind those rather than inside them.
+	 * <p>These are anchors, not positions. A model is drawn around the origin in Blockbench, and the
+	 * anchor is the point on the body that origin is pinned to, so a piece ends up where it was
+	 * drawn rather than where this file guesses.
 	 */
 	private static float[] placement(String kind) {
 		switch (kind) {
 			case "hat":
-				return new float[] {0.0F, -31.0F, 0.0F, 0.62F, 0.1F, 1.0F};
+				// The top of the head.
+				return new float[] {0.0F, -8.0F, 0.0F, 0.62F, 0.1F, 1.0F};
 			case "halo":
-				return new float[] {0.0F, -34.0F, 0.0F, 0.7F, 0.35F, 1.0F};
+				// A little above the head, which is the one thing that is meant to float.
+				return new float[] {0.0F, -14.0F, 0.0F, 0.7F, 0.35F, 1.0F};
 			case "mask":
-				return new float[] {0.0F, -9.0F, -4.6F, 0.42F, 0.0F, 1.0F};
+				return new float[] {0.0F, -4.0F, -4.6F, 0.42F, 0.0F, 1.0F};
 			case "shoulder":
-				return new float[] {0.0F, -2.0F, 0.0F, 0.5F, 0.25F, 2.0F};
+				return new float[] {0.0F, -1.0F, 0.0F, 0.5F, 0.25F, 2.0F};
 			case "aura":
-				return new float[] {0.0F, 2.0F, 0.0F, 1.7F, 0.25F, 1.0F};
+				// Around the middle of the body rather than at its feet.
+				return new float[] {0.0F, 12.0F, 0.0F, 1.7F, 0.25F, 1.0F};
 			case "trail":
-				return new float[] {0.0F, 9.0F, 3.4F, 1.15F, 0.45F, 1.0F};
+				return new float[] {0.0F, 18.0F, 3.4F, 1.15F, 0.45F, 1.0F};
 			case "backpack":
-				return new float[] {0.0F, 1.0F, 3.2F, 0.7F, 0.1F, 1.0F};
+				return new float[] {0.0F, 2.0F, 3.0F, 0.7F, 0.1F, 1.0F};
 			case "shield":
 				// Strapped flat on the back, behind the cape and the wings.
-				return new float[] {0.0F, 1.5F, 3.6F, 0.6F, 0.05F, 1.0F};
+				return new float[] {0.0F, 2.0F, 4.0F, 0.6F, 0.05F, 1.0F};
 			default:
-				// Wings, and anything new that lands on the back. Hung from just under the neck,
-				// tight against the back, so the picture covers the shoulders and not the sky.
-				return new float[] {0.0F, 1.0F, 2.2F, 0.9F, 0.35F, 1.0F};
+				// Wings, and anything new that lands on the back. Pinned at the back of the neck,
+				// two pixels off the body, which is where vanilla hangs a cape from.
+				return new float[] {0.0F, 0.0F, 2.0F, 0.9F, 0.35F, 1.0F};
 		}
 	}
 }
