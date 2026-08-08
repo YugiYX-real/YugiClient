@@ -1,12 +1,23 @@
 /*
  * Reads a model in the browser and reduces it to the small fixed shape the client builds from.
  *
- * A .bbmodel and a Minecraft model .json are both json with a list of boxes in them, so the panel
- * accepts either and the mod never has to know about Blockbench at all. A .gltf and a .glb are read
- * as well, with one caveat that is stated plainly rather than hidden: glTF is a triangle mesh
- * format and the game builds boxes, so every mesh part comes across as the box it fits inside.
- * Coordinates come out in the space Minecraft entity models use, where y grows downwards, so the
- * mod can hand them straight to a model builder.
+ * There is no single model file in Minecraft, there are four, and a wing can arrive as any of them:
+ * a Blockbench .bbmodel, a Java model .json, a Bedrock geometry .json (which is what Blockbench
+ * writes by default and what most wings on the internet are) and an OptiFine .jem. They disagree
+ * about almost everything, including where the boxes live: a .bbmodel keeps them in a flat list at
+ * the top, a Bedrock geometry buries them under a geometry entry and a list of bones, and a .jem
+ * puts them under models and submodels. Anything that only looked at the top of the file therefore
+ * announced that a perfectly good model had no boxes in it.
+ *
+ * So the reader walks the whole file instead and picks up every box it recognises, wherever it is:
+ * a pair of corners, a Bedrock origin and size, a .jem coordinates list, or the corner points of a
+ * mesh. A .gltf and a .glb are read as well, with one caveat that is stated plainly rather than
+ * hidden: glTF is a triangle mesh format and the game builds boxes, so every mesh part comes across
+ * as the box it fits inside. Coordinates come out in the space Minecraft entity models use, where y
+ * grows downwards, so the mod can hand them straight to a model builder.
+ *
+ * Turning is deliberately ignored everywhere. A box that has been turned is no longer a box, and
+ * quietly pretending otherwise would put the piece somewhere it was never drawn.
  *
  * A piece is often drawn as several modules, a left wing and a right wing and a harness, each saved
  * to its own file. Several files are read and joined into one model here, so the client still gets
@@ -27,15 +38,35 @@ window.HalcyonModel = (() => {
 	const MAX_CUBES = 128
 	const MAX_FRAMES = 64
 
+	/** How deep into a file the walk goes before it gives up, which no model comes close to. */
+	const MAX_DEPTH = 16
+
 	/** The file endings a model can be read out of. */
-	const MODEL_EXTENSIONS = [".bbmodel", ".json", ".gltf", ".glb"]
+	const MODEL_EXTENSIONS = [".bbmodel", ".json", ".geo.json", ".jem", ".gltf", ".glb"]
+
+	/**
+	 * Keys that never hold geometry and can be expensive to walk.
+	 *
+	 * A .bbmodel keeps every texture in the file as a base64 string under "textures", so skipping it
+	 * is the difference between reading a wing instantly and chewing through megabytes of picture.
+	 */
+	const SKIP_KEYS = new Set(["textures", "animations", "animation", "display", "history", "meta", "sounds", "particle_effects", "sound_effects"])
 
 	function round(value) {
 		return Math.round(Number(value) * 1000) / 1000
 	}
 
 	function triple(value) {
-		return Array.isArray(value) && value.length >= 3 && value.every((entry) => Number.isFinite(Number(entry)))
+		return Array.isArray(value) && value.length >= 3 && value.slice(0, 3).every((entry) => Number.isFinite(Number(entry)))
+	}
+
+	function pair(value) {
+		return Array.isArray(value) && value.length >= 2 && value.slice(0, 2).every((entry) => Number.isFinite(Number(entry)))
+	}
+
+	function positive(value) {
+		const number = Number(value)
+		return Number.isFinite(number) && number > 0
 	}
 
 	/** A texture sheet size, kept sane and falling back to the usual 64. */
@@ -44,94 +75,213 @@ window.HalcyonModel = (() => {
 		return Number.isFinite(size) && size > 0 ? Math.min(4096, size) : 64
 	}
 
-	/** Where a box takes its picture from, in texture pixels. */
-	function uvOf(element) {
-		if (triple([...(element.uv_offset ?? []), 0])) {
+	/**
+	 * Where a box takes its picture from, in texture pixels, for a box written as two corners.
+	 *
+	 * Blockbench writes a box uv offset when the project uses box uv, and a uv per face when it does
+	 * not. A per face uv gives the picture of one face rather than a box layout, so the box origin is
+	 * the front face shifted back by the depth of the box. That is exactly right for a flat piece and
+	 * close enough for anything thicker.
+	 */
+	function uvOf(element, depth) {
+		if (pair(element.uv_offset)) {
 			return [Number(element.uv_offset[0]), Number(element.uv_offset[1])]
 		}
+		if (pair(element.uv)) {
+			return [Number(element.uv[0]), Number(element.uv[1])]
+		}
 
-		const north = element.faces?.north?.uv
-		if (Array.isArray(north) && north.length >= 2) {
-			// Per face uv gives the picture of one face rather than a box layout, so the box origin
-			// is the front face shifted back by the depth of the box. That is exactly right for a
-			// flat piece and close enough for anything thicker.
-			const depth = Math.abs(Number(element.to?.[2] ?? 0) - Number(element.from?.[2] ?? 0))
+		const north = element.faces?.north?.uv ?? element.uv?.north?.uv
+		if (pair(north)) {
 			return [Math.max(0, Number(north[0]) - depth), Math.max(0, Number(north[1]) - depth)]
 		}
 		return [0, 0]
 	}
 
 	/**
+	 * One box in the shape the client builds from.
+	 *
+	 * Entity model space has y growing downwards, so a file authored the usual way round, with y
+	 * growing upwards, has its top corner negated. A .jem is already written in entity space and is
+	 * taken as it stands, which is what the upwards flag is for.
+	 */
+	function boxOf(name, from, to, uv, inflate, upwards) {
+		const low = [0, 1, 2].map((axis) => Math.min(Number(from[axis]), Number(to[axis])))
+		const high = [0, 1, 2].map((axis) => Math.max(Number(from[axis]), Number(to[axis])))
+
+		return {
+			name: String(name ?? "").slice(0, 40),
+			x: round(low[0]),
+			y: round(upwards ? -high[1] : low[1]),
+			z: round(low[2]),
+			width: round(high[0] - low[0]),
+			height: round(high[1] - low[1]),
+			depth: round(high[2] - low[2]),
+			u: round(Math.max(0, Number(uv[0]) || 0)),
+			v: round(Math.max(0, Number(uv[1]) || 0)),
+			inflate: round(Number(inflate ?? 0) || 0),
+		}
+	}
+
+	/** The corners a mesh element covers, so a piece drawn with the mesh tool still comes across. */
+	function meshCorners(element) {
+		const source = element.vertices
+		const points = Array.isArray(source)
+			? source
+			: source !== null && typeof source === "object"
+				? Object.values(source)
+				: []
+		const usable = points.filter((point) => triple(point))
+		if (usable.length === 0) {
+			return null
+		}
+
+		const origin = triple(element.origin) ? element.origin.map(Number) : [0, 0, 0]
+		const low = [0, 1, 2].map((axis) => origin[axis] + Math.min(...usable.map((point) => Number(point[axis]))))
+		const high = [0, 1, 2].map((axis) => origin[axis] + Math.max(...usable.map((point) => Number(point[axis]))))
+		return { from: low, to: high }
+	}
+
+	/**
+	 * Walks a file and collects every box in it, in whichever of the four shapes it was written.
+	 *
+	 * Each branch is a different program's idea of a box:
+	 *   from and to        a Blockbench .bbmodel or a Java model .json
+	 *   origin and size    a Bedrock geometry, whether under bones or anywhere else
+	 *   coordinates        an OptiFine .jem, already in entity space
+	 *   vertices           a Blockbench mesh, reduced to the box it fits inside
+	 */
+	function harvest(node, out, depth) {
+		if (node === null || typeof node !== "object" || depth > MAX_DEPTH || out.length >= MAX_CUBES) {
+			return
+		}
+
+		if (Array.isArray(node)) {
+			for (const entry of node) {
+				harvest(entry, out, depth + 1)
+			}
+			return
+		}
+
+		const hidden = node.visibility === false || node.export === false
+		const name = typeof node.name === "string" ? node.name : ""
+
+		if (!hidden) {
+			if (triple(node.from) && triple(node.to)) {
+				const depthOf = Math.abs(Number(node.to[2]) - Number(node.from[2]))
+				out.push(boxOf(name, node.from.map(Number), node.to.map(Number), uvOf(node, depthOf), node.inflate, true))
+			} else if (triple(node.origin) && triple(node.size)) {
+				const origin = node.origin.map(Number)
+				const size = node.size.map(Number)
+				const to = [0, 1, 2].map((axis) => origin[axis] + size[axis])
+				out.push(boxOf(name, origin, to, uvOf(node, Math.abs(size[2])), node.inflate, true))
+			} else if (Array.isArray(node.coordinates) && node.coordinates.length >= 6) {
+				const cells = node.coordinates.slice(0, 6).map(Number)
+				if (cells.every((cell) => Number.isFinite(cell))) {
+					const from = [cells[0], cells[1], cells[2]]
+					const to = [cells[0] + cells[3], cells[1] + cells[4], cells[2] + cells[5]]
+					const uv = pair(node.textureOffset) ? node.textureOffset : [0, 0]
+					out.push(boxOf(name, from, to, uv, node.sizeAdd, false))
+				}
+			} else if (node.vertices !== undefined && node.vertices !== null) {
+				const corners = meshCorners(node)
+				if (corners !== null) {
+					out.push(boxOf(name, corners.from, corners.to, uvOf(node, 0), 0, true))
+				}
+			}
+		}
+
+		for (const key of Object.keys(node)) {
+			if (SKIP_KEYS.has(key)) {
+				continue
+			}
+			harvest(node[key], out, depth + 1)
+		}
+	}
+
+	/**
+	 * Finds the texture sheet the model was drawn against, wherever the format keeps it.
+	 *
+	 * Blockbench writes resolution, a Java model writes texture_size, a Bedrock geometry writes
+	 * texturewidth and textureheight on the geometry or its description, and a .jem writes
+	 * textureSize. Nothing found means the usual 64 by 64.
+	 */
+	function sheetOf(node, depth) {
+		if (node === null || typeof node !== "object" || depth > MAX_DEPTH) {
+			return null
+		}
+
+		if (Array.isArray(node)) {
+			for (const entry of node) {
+				const found = sheetOf(entry, depth + 1)
+				if (found !== null) {
+					return found
+				}
+			}
+			return null
+		}
+
+		const resolution = node.resolution
+		if (resolution !== null && typeof resolution === "object" && positive(resolution.width) && positive(resolution.height)) {
+			return [sheet(resolution.width), sheet(resolution.height)]
+		}
+		if (pair(node.texture_size)) {
+			return [sheet(node.texture_size[0]), sheet(node.texture_size[1])]
+		}
+		if (pair(node.textureSize)) {
+			return [sheet(node.textureSize[0]), sheet(node.textureSize[1])]
+		}
+		if (positive(node.texturewidth) && positive(node.textureheight)) {
+			return [sheet(node.texturewidth), sheet(node.textureheight)]
+		}
+		if (positive(node.texture_width) && positive(node.texture_height)) {
+			return [sheet(node.texture_width), sheet(node.texture_height)]
+		}
+
+		for (const key of Object.keys(node)) {
+			if (SKIP_KEYS.has(key)) {
+				continue
+			}
+			const found = sheetOf(node[key], depth + 1)
+			if (found !== null) {
+				return found
+			}
+		}
+		return null
+	}
+
+	/**
 	 * Turns parsed json into the client shape.
 	 *
-	 * Throws with a plain sentence when the file is not a model, because that message is shown to
-	 * whoever is publishing rather than swallowed.
+	 * Throws with a plain sentence when the file holds nothing to build, and says what the file did
+	 * hold, because being told only that a model has no boxes when it plainly does is useless.
 	 */
 	function normalise(json) {
 		if (json === null || typeof json !== "object") {
 			throw new Error("that file is not a model")
 		}
 
-		const elements = Array.isArray(json.elements)
-			? json.elements
-			: Array.isArray(json.cubes)
-				? json.cubes
-				: []
-		if (elements.length === 0) {
-			throw new Error("that model has no boxes in it")
-		}
-
-		const resolution = json.resolution ?? {}
-		const size = Array.isArray(json.texture_size) ? json.texture_size : []
-		const textureWidth = Math.max(1, Number(resolution.width ?? size[0] ?? 64))
-		const textureHeight = Math.max(1, Number(resolution.height ?? size[1] ?? 64))
-
 		const cubes = []
-		for (const element of elements) {
-			if (element === null || typeof element !== "object") {
-				continue
-			}
-			// Blockbench keeps groups, locators and meshes in the same list. Only boxes have both
-			// corners, so anything else is skipped rather than guessed at.
-			if (!triple(element.from) || !triple(element.to)) {
-				continue
-			}
-			if (element.visibility === false || element.export === false) {
-				continue
-			}
+		harvest(json, cubes, 0)
 
-			const from = element.from.map(Number)
-			const to = element.to.map(Number)
-			const width = Math.abs(to[0] - from[0])
-			const height = Math.abs(to[1] - from[1])
-			const depth = Math.abs(to[2] - from[2])
-			const uv = uvOf(element)
-
-			cubes.push({
-				name: typeof element.name === "string" ? element.name.slice(0, 40) : "",
-				// Entity model space has y growing downwards, so the top corner of the box is the
-				// negated upper edge of what was authored.
-				x: round(Math.min(from[0], to[0])),
-				y: round(-Math.max(from[1], to[1])),
-				z: round(Math.min(from[2], to[2])),
-				width: round(width),
-				height: round(height),
-				depth: round(depth),
-				u: round(uv[0]),
-				v: round(uv[1]),
-				inflate: round(Number(element.inflate ?? 0)),
-			})
-
-			if (cubes.length === MAX_CUBES) {
-				break
-			}
+		const usable = cubes.filter((cube) => cube.width > 0 || cube.height > 0 || cube.depth > 0)
+		if (usable.length === 0) {
+			const keys = Object.keys(json).slice(0, 8).join(", ")
+			throw new Error(
+				"no boxes could be read out of that file" +
+					(keys === "" ? "" : ` (it holds: ${keys})`) +
+					". A .bbmodel, a Java model .json, a Bedrock geometry .json, an OptiFine .jem, a .gltf and " +
+					"a .glb are all read, so if this is one of those, send the file and it gets taught here.",
+			)
 		}
 
-		if (cubes.length === 0) {
-			throw new Error("that model has no boxes the client can build")
+		const size = sheetOf(json, 0) ?? [64, 64]
+		return {
+			format: FORMAT,
+			textureWidth: size[0],
+			textureHeight: size[1],
+			cubes: usable.slice(0, MAX_CUBES),
 		}
-
-		return { format: FORMAT, textureWidth, textureHeight, cubes }
 	}
 
 	/** True for the two glTF endings, which are read differently from the json models. */
@@ -206,9 +356,9 @@ window.HalcyonModel = (() => {
 	/**
 	 * How far a node moves and how much it grows what is under it.
 	 *
-	 * Turning is deliberately ignored: a box that has been turned is no longer a box, and quietly
-	 * pretending otherwise would place the piece somewhere it was never drawn. Draw the piece the way
-	 * round it should be worn and it comes across unchanged.
+	 * Turning is ignored here for the same reason it is ignored everywhere else in this file: a box
+	 * that has been turned is no longer a box. Draw the piece the way round it should be worn and it
+	 * comes across unchanged.
 	 */
 	function nodeTransform(node) {
 		if (Array.isArray(node.matrix) && node.matrix.length === 16) {
@@ -440,7 +590,7 @@ window.HalcyonModel = (() => {
 		}
 	}
 
-	/** Reads one picked model file, whichever of the four endings it has. */
+	/** Reads one picked model file, whichever ending it has. */
 	async function fromFile(file) {
 		if (isGltfName(file.name)) {
 			return normaliseGltf(await gltfJson(file))
