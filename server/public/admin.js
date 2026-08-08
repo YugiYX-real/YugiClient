@@ -1,10 +1,11 @@
 /*
  * The admin panel.
  *
- * Publishing a cosmetic means uploading three files and nothing else: a Blockbench model, a png, and
- * an animation mcmeta when the thing moves. The model and the mcmeta are read here in the browser
- * and reduced to the small shapes the client builds from, and the same reduced pair is what the
- * preview above the button is drawn from, so what is on screen is what every client will build.
+ * Publishing a cosmetic means uploading the model, a png, and an animation mcmeta when the thing
+ * moves. A piece drawn as several modules can be picked as several model files at once, and they
+ * are joined here into the one model the client builds from. The model and the mcmeta are read in
+ * the browser and reduced to the small shapes the client understands, and the same reduced pair is
+ * what the preview above the button is drawn from, so what is on screen is what every client gets.
  */
 
 let announcements = []
@@ -30,6 +31,11 @@ function bytes(value) {
 /** File names travel in a url, so anything unusual becomes a dash. */
 function safeName(name) {
 	return String(name).replace(/[^A-Za-z0-9._-]+/g, "-")
+}
+
+/** Every model file that is picked, in the order the browser hands them over. */
+function modelFiles() {
+	return Array.from(document.getElementById("c-model").files ?? [])
 }
 
 /** A box left empty means "leave it to the kind", so nothing is sent for it. */
@@ -93,7 +99,7 @@ function drawFrame(frame) {
 async function refreshPreview() {
 	const note = document.getElementById("c-preview")
 	const canvas = document.getElementById("c-canvas")
-	const modelFile = document.getElementById("c-model").files[0]
+	const models = modelFiles()
 	const textureFile = document.getElementById("c-file").files[0]
 	const metaFile = document.getElementById("c-mcmeta").files[0]
 
@@ -112,8 +118,11 @@ async function refreshPreview() {
 				`texture ${pickedImage.naturalWidth}x${pickedImage.naturalHeight}, ${bytes(textureFile.size)}`,
 			)
 		}
-		if (modelFile !== undefined) {
-			pickedModel = await HalcyonModel.fromFile(modelFile)
+		if (models.length > 0) {
+			pickedModel = await HalcyonModel.fromFiles(models)
+			if (models.length > 1) {
+				lines.push(`${models.length} model files joined`)
+			}
 			lines.push(HalcyonModel.describe(pickedModel))
 		}
 		if (metaFile !== undefined) {
@@ -497,7 +506,7 @@ async function publishVersion() {
  * them together.
  *
  * Nothing is guessed from the preview: every file is read again here, in case one was swapped after
- * it was drawn.
+ * it was drawn. Several model files are joined into the single model.json the client downloads.
  */
 async function publishCosmetic() {
 	const button = document.getElementById("publish")
@@ -510,12 +519,12 @@ async function publishCosmetic() {
 	}
 
 	const textureFile = document.getElementById("c-file").files[0]
-	const modelFile = document.getElementById("c-model").files[0]
+	const models = modelFiles()
 	const metaFile = document.getElementById("c-mcmeta").files[0]
 
 	button.disabled = true
 	try {
-		const model = modelFile === undefined ? null : await HalcyonModel.fromFile(modelFile)
+		const model = models.length === 0 ? null : await HalcyonModel.fromFiles(models)
 		const meta = metaFile === undefined ? null : await HalcyonModel.mcmetaFromFile(metaFile)
 		const image = textureFile === undefined ? null : await loadImage(textureFile)
 
@@ -533,7 +542,10 @@ async function publishCosmetic() {
 		}
 
 		if (model !== null) {
-			status.textContent = `Uploading the model, ${model.cubes.length} boxes`
+			status.textContent =
+				models.length === 1
+					? `Uploading the model, ${model.cubes.length} boxes`
+					: `Uploading ${models.length} model files joined into ${model.cubes.length} boxes`
 			await Halcyon.api(`/v1/cosmetics/textures/${id}.model.json`, {
 				method: "PUT",
 				body: new Blob([JSON.stringify(model)], { type: "application/json" }),
