@@ -119,7 +119,7 @@
 				<section class="section">
 					<div class="section-head">
 						<h2>Create a cosmetic</h2>
-						<p>Capes, wings, hats and anything else, still or animated</p>
+						<p>One model and one texture, whatever the thing is</p>
 					</div>
 					<div class="card">
 						<div class="inline">
@@ -137,6 +137,7 @@
 									<option value="cape">Cape</option>
 									<option value="wings">Wings</option>
 									<option value="backpack">Backpack</option>
+									<option value="shield">Shield</option>
 									<option value="hat">Hat</option>
 									<option value="halo">Halo</option>
 									<option value="mask">Mask</option>
@@ -161,49 +162,52 @@
 							<label for="c-description">Description</label>
 							<input id="c-description" placeholder="Handed out to founders" />
 						</div>
+
 						<div class="inline">
 							<div class="field">
-								<label for="c-animated">Animated</label>
-								<select id="c-animated">
-									<option value="no">No, one still image</option>
-									<option value="yes">Yes, one tall strip of frames</option>
-								</select>
+								<label for="c-model">Model, .bbmodel or .json</label>
+								<input id="c-model" type="file" accept=".bbmodel,.json,application/json" />
+								<div class="hint">
+									Save straight out of Blockbench. The boxes are read here in the browser
+									and stored in the small shape the client builds from, so the game never
+									has to understand Blockbench. Box uv is what the game uses, so a model
+									set to box uv comes out exactly as you drew it.
+								</div>
 							</div>
 							<div class="field">
-								<label for="c-frames">Frames in the strip</label>
-								<input id="c-frames" type="number" min="2" max="64" value="8" />
-							</div>
-							<div class="field">
-								<label for="c-frame-ms">Milliseconds per frame</label>
-								<input id="c-frame-ms" type="number" min="20" max="5000" value="100" />
-							</div>
-						</div>
-						<div class="field">
-							<label for="c-gif">Your own animation, one gif</label>
-							<input id="c-gif" type="file" accept="image/gif" />
-							<div class="hint">
-								The easy way in: export whatever you drew as a gif and drop it here. The
-								server takes it apart into one png per frame, reads the speed out of the gif
-								itself and keeps the gif so the website can play it. Transparency is kept, up
-								to 64 frames, and a longer gif is thinned out evenly rather than cut short.
+								<label for="c-file">Texture, .png</label>
+								<input id="c-file" type="file" accept="image/png" />
+								<div class="hint">
+									The texture the model is painted with. Transparency is kept. A cape
+									needs no model at all, just the usual 64x32 sheet.
+								</div>
 							</div>
 						</div>
-						<div class="field">
-							<label for="c-file">Still texture, png</label>
-							<input id="c-file" type="file" accept="image/png" />
-							<div class="hint">
-								A cape is one 64x32 sheet. Leave this empty when you upload a gif or frames,
-								and the first frame becomes the still picture on its own.
+
+						<div class="card" style="margin-top: 0.9rem">
+							<div class="row">
+								<canvas
+									id="c-canvas"
+									width="220"
+									height="220"
+									style="
+										width: 220px;
+										height: 220px;
+										border-radius: 9px;
+										background: rgba(10, 10, 20, 0.6);
+										image-rendering: pixelated;
+										flex: 0 0 auto;
+									"
+								></canvas>
+								<div>
+									<strong>Preview</strong>
+									<div class="hint" id="c-preview" style="margin-top: 0.4rem">
+										Pick a model and a texture to see it before anyone can wear it.
+									</div>
+								</div>
 							</div>
 						</div>
-						<div class="field">
-							<label for="c-frame-files">Or one png per frame</label>
-							<input id="c-frame-files" type="file" accept="image/png" multiple />
-							<div class="hint">
-								Pick every frame at once, named so they sort in the order they should play,
-								for example frame-01.png to frame-12.png. Frames picked here win over a gif.
-							</div>
-						</div>
+
 						<div class="inline">
 							<div class="field">
 								<label for="c-scale">Size</label>
@@ -227,8 +231,8 @@
 								<label for="c-mirror">Mirrored pair</label>
 								<select id="c-mirror">
 									<option value="auto">Whatever the kind wants</option>
-									<option value="yes">Yes, one on each side</option>
-									<option value="no">No, one piece</option>
+									<option value="yes">Yes, draw a second mirrored copy</option>
+									<option value="no">No, the model is already complete</option>
 								</select>
 							</div>
 							<div class="field">
@@ -241,10 +245,10 @@
 							</div>
 						</div>
 						<div class="hint">
-							Leave those five alone and the kind decides: wings stand off the back as a
-							mirrored pair and beat as you move, a halo floats above the head and glows, a
-							cape hangs flat. Fill one in when a particular piece of art needs to sit a
-							little bigger, higher or further out than the rest of its kind.
+							A model is worn where it was drawn, so leave these alone unless a particular
+							piece needs nudging. Draw wings as a complete pair and leave the mirror box on
+							no, and draw everything around the middle of the body so it sits on the player
+							rather than behind it.
 						</div>
 						<div class="row">
 							<button class="button primary" id="publish">Publish cosmetic</button>
@@ -329,8 +333,13 @@
 		</footer>
 
 		<script src="/app.js"></script>
+		<script src="/model.js"></script>
 		<script>
 			let announcements = []
+
+			// What the preview is currently showing, and what publishing will upload.
+			let pickedModel = null
+			let pickedImage = null
 
 			function bytes(value) {
 				const size = Number(value ?? 0)
@@ -364,6 +373,88 @@
 					return true
 				}
 				return value === "no" ? false : undefined
+			}
+
+			/** Loads a picked png so the preview can take pieces out of it. */
+			function loadImage(file) {
+				return new Promise((resolve, reject) => {
+					const url = URL.createObjectURL(file)
+					const image = new Image()
+					image.addEventListener("load", () => {
+						URL.revokeObjectURL(url)
+						resolve(image)
+					})
+					image.addEventListener("error", () => {
+						URL.revokeObjectURL(url)
+						reject(new Error("that png could not be read"))
+					})
+					image.src = url
+				})
+			}
+
+			/**
+			 * Draws whatever is picked right now.
+			 *
+			 * A model on its own is drawn as flat boxes, a texture on its own is drawn whole, and both
+			 * together are drawn as the actual thing, so a wrong file is obvious before publishing.
+			 */
+			async function refreshPreview() {
+				const note = document.getElementById("c-preview")
+				const canvas = document.getElementById("c-canvas")
+				const context = canvas.getContext("2d")
+				const modelFile = document.getElementById("c-model").files[0]
+				const textureFile = document.getElementById("c-file").files[0]
+
+				pickedModel = null
+				pickedImage = null
+				context.clearRect(0, 0, canvas.width, canvas.height)
+
+				const lines = []
+
+				try {
+					if (textureFile !== undefined) {
+						pickedImage = await loadImage(textureFile)
+						lines.push(
+							`texture ${pickedImage.naturalWidth}x${pickedImage.naturalHeight}, ${bytes(textureFile.size)}`,
+						)
+					}
+					if (modelFile !== undefined) {
+						pickedModel = await HalcyonModel.fromFile(modelFile)
+						lines.push(HalcyonModel.describe(pickedModel))
+					}
+				} catch (error) {
+					note.textContent = error.message
+					return
+				}
+
+				if (pickedModel !== null) {
+					HalcyonModel.paint(canvas, pickedModel, pickedImage)
+					if (pickedImage === null) {
+						lines.push("no texture picked yet, so the boxes are drawn plain")
+					}
+				} else if (pickedImage !== null) {
+					// No model means the texture is worn as it is, which is what a cape does.
+					const scale = Math.min(
+						canvas.width / pickedImage.naturalWidth,
+						canvas.height / pickedImage.naturalHeight,
+					)
+					const width = pickedImage.naturalWidth * scale
+					const height = pickedImage.naturalHeight * scale
+					context.imageSmoothingEnabled = false
+					context.drawImage(
+						pickedImage,
+						(canvas.width - width) / 2,
+						(canvas.height - height) / 2,
+						width,
+						height,
+					)
+					lines.push("no model picked, so this is worn flat like a cape")
+				}
+
+				note.textContent =
+					lines.length === 0
+						? "Pick a model and a texture to see it before anyone can wear it."
+						: lines.join(" \u00b7 ")
 			}
 
 			function paintAnnouncements() {
@@ -458,9 +549,7 @@
 			/** The one line under a cosmetic in the list: what it is and how it behaves. */
 			function describe(cosmetic) {
 				const parts = [cosmetic.type ?? "cape"]
-				if (cosmetic.animated === true) {
-					parts.push(`animated over ${cosmetic.frames ?? 1} frames at ${cosmetic.frameMs ?? 100}ms`)
-				}
+				parts.push(cosmetic.hasModel === true ? "own model" : "flat")
 				if (cosmetic.mirror === true) {
 					parts.push("mirrored pair")
 				}
@@ -731,12 +820,18 @@
 				}
 			})
 
+			document.getElementById("c-model").addEventListener("change", () => {
+				refreshPreview().catch((error) => Halcyon.toast(error.message, true))
+			})
+			document.getElementById("c-file").addEventListener("change", () => {
+				refreshPreview().catch((error) => Halcyon.toast(error.message, true))
+			})
+
 			/**
-			 * Publishes one cosmetic.
+			 * Publishes one cosmetic: the model, the texture, and the record that ties them together.
 			 *
-			 * An animation can arrive as a gif, which the server splits into frames, or as one png per
-			 * frame picked by hand. Either way the record ends up holding the list of frames, so the
-			 * client plays the owner's own art in the world and in the wardrobe.
+			 * The model is uploaded in the reduced shape the preview was drawn from, so what was on
+			 * screen a moment ago is exactly what every client will build.
 			 */
 			document.getElementById("publish").addEventListener("click", async () => {
 				const button = document.getElementById("publish")
@@ -748,58 +843,32 @@
 					return
 				}
 
-				const gif = document.getElementById("c-gif").files[0]
-				const file = document.getElementById("c-file").files[0]
-				const frames = Array.from(document.getElementById("c-frame-files").files)
-				const animated = document.getElementById("c-animated").value === "yes"
+				const texture = document.getElementById("c-file").files[0]
+				const modelFile = document.getElementById("c-model").files[0]
 
 				button.disabled = true
 				try {
-					let frameTextures = []
-					let frameMs = Number(document.getElementById("c-frame-ms").value)
+					// Read again rather than trusting the preview, in case a file was swapped after it
+					// was drawn.
+					const model =
+						modelFile === undefined ? null : await HalcyonModel.fromFile(modelFile)
 
-					if (gif !== undefined) {
-						status.textContent = `Splitting ${gif.name}, ${bytes(gif.size)}`
-						const animation = await Halcyon.api(
-							`/v1/cosmetics/animation?id=${encodeURIComponent(id)}`,
-							{ method: "POST", body: gif, raw: true },
-						)
-						frameTextures = animation.frameTextures ?? []
-						frameMs = animation.frameMs ?? frameMs
-						status.textContent = `${animation.frames} of ${animation.total} frames kept, ${animation.width}x${animation.height}, ${animation.frameMs}ms each`
-					}
-
-					if (file !== undefined) {
-						status.textContent = "Uploading the still texture"
+					if (texture !== undefined) {
+						status.textContent = `Uploading the texture, ${bytes(texture.size)}`
 						await Halcyon.api(`/v1/cosmetics/textures/${id}.png`, {
 							method: "PUT",
-							body: file,
+							body: texture,
 							raw: true,
 						})
 					}
 
-					if (frames.length > 0) {
-						frameTextures = []
-						for (let index = 0; index < frames.length; index += 1) {
-							const name = `${id}.f${index + 1}.png`
-							status.textContent = `Uploading frame ${index + 1} of ${frames.length}`
-							await Halcyon.api(`/v1/cosmetics/textures/${name}`, {
-								method: "PUT",
-								body: frames[index],
-								raw: true,
-							})
-							frameTextures.push(`/v1/cosmetics/textures/${name}`)
-
-							// The first frame doubles as the still picture, so the website and
-							// anything that has not loaded the animation yet has something to show.
-							if (index === 0 && file === undefined) {
-								await Halcyon.api(`/v1/cosmetics/textures/${id}.png`, {
-									method: "PUT",
-									body: frames[index],
-									raw: true,
-								})
-							}
-						}
+					if (model !== null) {
+						status.textContent = `Uploading the model, ${model.cubes.length} boxes`
+						await Halcyon.api(`/v1/cosmetics/textures/${id}.model.json`, {
+							method: "PUT",
+							body: new Blob([JSON.stringify(model)], { type: "application/json" }),
+							raw: true,
+						})
 					}
 
 					const body = {
@@ -808,18 +877,12 @@
 						type: document.getElementById("c-type").value,
 						rarity: document.getElementById("c-rarity").value,
 						description: document.getElementById("c-description").value,
-						animated: animated || frameTextures.length > 1,
-						frames:
-							frameTextures.length > 1
-								? frameTextures.length
-								: Number(document.getElementById("c-frames").value),
-						frameMs,
 					}
 
-					// Only sent when frames were picked, so editing a name cannot wipe an animation
-					// that is already published.
-					if (frameTextures.length > 0) {
-						body.frameTextures = frameTextures
+					// Only sent when a model was picked, so editing a name cannot drop the model a
+					// cosmetic already has.
+					if (model !== null) {
+						body.model = `/v1/cosmetics/textures/${id}.model.json`
 					}
 
 					// Placement is only sent for the boxes that were filled in, so everything else
@@ -854,22 +917,4 @@
 				try {
 					await Halcyon.api(`/v1/cosmetics/${endpoint}`, {
 						method: "POST",
-						body: {
-							name: document.getElementById("g-name").value,
-							id: document.getElementById("g-id").value,
-						},
-					})
-					Halcyon.toast(endpoint === "grant" ? "granted" : "revoked")
-					load()
-				} catch (error) {
-					Halcyon.toast(error.message, true)
-				}
-			}
-
-			document.getElementById("grant").addEventListener("click", () => handout("grant"))
-			document.getElementById("revoke").addEventListener("click", () => handout("revoke"))
-
-			load().catch((error) => Halcyon.say("message", error.message))
-		</script>
-	</body>
-</html>
+						

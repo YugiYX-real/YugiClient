@@ -13,20 +13,22 @@ const PERSIST_DELAY_MS = 2000
 // Cosmetic ids end up in urls and file names, so they are kept to a short lowercase slug.
 const COSMETIC_ID = /^[a-z0-9][a-z0-9_-]{0,47}$/
 
-/** The most frames one cosmetic may be built from, whether stacked, uploaded or split from a gif. */
+/** The most frames one cosmetic may be built from. Kept for records written by older builds. */
 const MAX_FRAMES = 64
 
 /**
  * Every kind of cosmetic the client knows how to wear.
  *
  * A slot is what actually decides what replaces what: capes and wings both hang off the back, so
- * wearing wings takes the cape off rather than drawing both through each other. Adding a new kind
- * of cosmetic later is a line in this table and nothing else.
+ * wearing wings takes the cape off rather than drawing both through each other. A shield is its own
+ * slot, because a shield on the back and a cape on the back would fight over the same space.
+ * Adding a new kind of cosmetic later is a line in this table and nothing else.
  */
 export const COSMETIC_TYPES = {
 	cape: { slot: "back", label: "Cape" },
 	wings: { slot: "back", label: "Wings" },
 	backpack: { slot: "back", label: "Backpack" },
+	shield: { slot: "shield", label: "Shield" },
 	hat: { slot: "head", label: "Hat" },
 	halo: { slot: "halo", label: "Halo" },
 	mask: { slot: "face", label: "Mask" },
@@ -42,19 +44,20 @@ export const COSMETIC_SLOTS = Array.from(
 /**
  * How each kind is placed on the player unless the owner says otherwise.
  *
- * A cape is a flat sheet that hangs from the shoulders, but wings stand off the back and are drawn
- * as a mirrored pair, and a halo floats above the head. Those differences are data, not code, so a
- * new kind of cosmetic only needs a sensible line here.
+ * These are nudges on top of the model's own coordinates, not a substitute for them. A model is
+ * authored where it belongs, so the defaults are deliberately small: a cosmetic that is shifted and
+ * swung by the client is exactly what made wings look like they were floating behind the player.
  */
 const GEOMETRY = {
 	cape: { scale: 1, offsetX: 0, offsetY: 0, offsetZ: 0, flap: 0, mirror: false, glow: false },
-	wings: { scale: 1.4, offsetX: 0, offsetY: 0.15, offsetZ: 0.12, flap: 0.6, mirror: true, glow: false },
-	backpack: { scale: 0.8, offsetX: 0, offsetY: 0, offsetZ: 0.1, flap: 0, mirror: false, glow: false },
-	hat: { scale: 1, offsetX: 0, offsetY: 0.05, offsetZ: 0, flap: 0, mirror: false, glow: false },
-	halo: { scale: 1, offsetX: 0, offsetY: 0.45, offsetZ: 0, flap: 0, mirror: false, glow: true },
+	wings: { scale: 1, offsetX: 0, offsetY: 0, offsetZ: 0, flap: 0.25, mirror: false, glow: false },
+	backpack: { scale: 1, offsetX: 0, offsetY: 0, offsetZ: 0, flap: 0, mirror: false, glow: false },
+	shield: { scale: 1, offsetX: 0, offsetY: 0, offsetZ: 0, flap: 0, mirror: false, glow: false },
+	hat: { scale: 1, offsetX: 0, offsetY: 0, offsetZ: 0, flap: 0, mirror: false, glow: false },
+	halo: { scale: 1, offsetX: 0, offsetY: 0, offsetZ: 0, flap: 0.2, mirror: false, glow: true },
 	mask: { scale: 1, offsetX: 0, offsetY: 0, offsetZ: 0, flap: 0, mirror: false, glow: false },
-	shoulder: { scale: 0.6, offsetX: 0.3, offsetY: 0.2, offsetZ: 0, flap: 0, mirror: false, glow: false },
-	aura: { scale: 1.6, offsetX: 0, offsetY: 0, offsetZ: 0, flap: 0.2, mirror: false, glow: true },
+	shoulder: { scale: 1, offsetX: 0, offsetY: 0, offsetZ: 0, flap: 0.2, mirror: false, glow: false },
+	aura: { scale: 1, offsetX: 0, offsetY: 0, offsetZ: 0, flap: 0.2, mirror: false, glow: true },
 	trail: { scale: 1, offsetX: 0, offsetY: 0, offsetZ: 0, flap: 0.3, mirror: false, glow: true },
 }
 
@@ -86,13 +89,23 @@ function normaliseRarity(value) {
 	return RARITIES.includes(text) ? text : "common"
 }
 
+/** One address that has to be fetchable by a client, or the fallback when it cannot be. */
+function normaliseAddress(value, fallback) {
+	const text = typeof value === "string" ? value.trim() : ""
+	if (text === "" || text.length > 300) {
+		return fallback
+	}
+	if (!text.startsWith("/") && !text.startsWith("http://") && !text.startsWith("https://")) {
+		return fallback
+	}
+	return text
+}
+
 /**
- * The addresses of the pictures an animation is built from, one per frame.
+ * The addresses of the pictures an older animated cosmetic was built from.
  *
- * This is how an owner brings an animation of their own: upload a gif, or a picture for every
- * frame, and the client plays them in this order, in the world as well as in the wardrobe.
- * Anything that is not a usable address is dropped rather than stored, so a bad entry cannot break
- * a client later.
+ * Nothing writes these any more: a cosmetic is a model and a texture. They are still read so a
+ * server that has been running since before models existed keeps showing what it already had.
  */
 function normaliseFrameTextures(value) {
 	if (!Array.isArray(value)) {
@@ -101,11 +114,8 @@ function normaliseFrameTextures(value) {
 
 	const frames = []
 	for (const entry of value) {
-		const text = typeof entry === "string" ? entry.trim() : ""
-		if (text === "" || text.length > 300) {
-			continue
-		}
-		if (!text.startsWith("/") && !text.startsWith("http://") && !text.startsWith("https://")) {
+		const text = normaliseAddress(entry, "")
+		if (text === "") {
 			continue
 		}
 		frames.push(text)
@@ -224,7 +234,7 @@ export class Store {
 
 	/**
 	 * Brings records written by older builds up to the current shape, so a server that has been
-	 * running since before wings existed keeps every cape and every grant it already had.
+	 * running since before models existed keeps every cape and every grant it already had.
 	 */
 	migrate() {
 		let touched = false
@@ -232,8 +242,7 @@ export class Store {
 		for (const [id, record] of Object.entries(this.state.cosmetics)) {
 			if (
 				record.slot === undefined ||
-				record.animated === undefined ||
-				record.frameTextures === undefined ||
+				record.model === undefined ||
 				record.scale === undefined
 			) {
 				this.state.cosmetics[id] = this.shapeCosmetic(id, record, record)
@@ -380,23 +389,17 @@ export class Store {
 		return this.state.cosmetics[normaliseCosmeticId(id)] ?? null
 	}
 
-	/** Builds the stored shape of one cosmetic from whatever the panel sent. */
+	/**
+	 * Builds the stored shape of one cosmetic from whatever the panel sent.
+	 *
+	 * The two things that matter are the model and the texture. Everything else is either a label or
+	 * a small nudge on top of the coordinates the model was authored with.
+	 */
 	shapeCosmetic(id, entry, existing) {
 		const type = normaliseCosmeticType(entry.type ?? existing.type)
-		const frameTextures = normaliseFrameTextures(entry.frameTextures ?? existing.frameTextures)
-		const separate = frameTextures.length > 1
 		const placement = geometryOf(type)
-
-		// A set of uploaded frames is an animation by definition, so it decides both answers and
-		// the switch in the panel only matters for a stacked strip.
-		const animated = separate
-			? true
-			: typeof entry.animated === "boolean"
-				? entry.animated
-				: (existing.animated ?? false)
-		const frames = separate
-			? frameTextures.length
-			: clamp(entry.frames ?? existing.frames, 1, MAX_FRAMES, 1)
+		const model = normaliseAddress(entry.model ?? existing.model, "")
+		const frameTextures = normaliseFrameTextures(entry.frameTextures ?? existing.frameTextures)
 
 		return {
 			id,
@@ -408,17 +411,20 @@ export class Store {
 					? entry.description
 					: (existing.description ?? ""),
 			rarity: normaliseRarity(entry.rarity ?? existing.rarity),
-			texture:
-				typeof entry.texture === "string" && entry.texture.trim() !== ""
-					? entry.texture.trim()
-					: (existing.texture ?? `/v1/cosmetics/textures/${id}.png`),
-			// Either one picture per frame, or every frame stacked into one tall strip.
+			texture: normaliseAddress(
+				entry.texture ?? existing.texture,
+				`/v1/cosmetics/textures/${id}.png`,
+			),
+			// The Blockbench model, already reduced to the small shape the client builds from.
+			// A cosmetic without one is drawn on a flat panel, which is all a cape ever needs.
+			model,
+			hasModel: model !== "",
+			// Kept so a client built before models existed still gets what it expects.
 			frameTextures,
-			animated: animated && frames > 1,
-			frames: animated ? Math.max(2, frames) : 1,
+			animated: frameTextures.length > 1,
+			frames: frameTextures.length > 1 ? frameTextures.length : 1,
 			frameMs: clamp(entry.frameMs ?? existing.frameMs, 20, 5000, 100),
-			// How the thing is actually worn. Wings need to stand off the back and beat, a halo
-			// needs to float, and the owner can tune any of it per cosmetic.
+			// How the thing is worn, on top of its own coordinates.
 			scale: decimal(entry.scale ?? existing.scale, 0.1, 4, placement.scale),
 			offsetX: decimal(entry.offsetX ?? existing.offsetX, -2, 2, placement.offsetX),
 			offsetY: decimal(entry.offsetY ?? existing.offsetY, -2, 2, placement.offsetY),
