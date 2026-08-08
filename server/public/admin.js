@@ -177,6 +177,7 @@ async function assemble() {
 	let image = null
 	let blob = null
 	let joined = 0
+	let fitted = 0
 
 	if (picked.textures.length === 1) {
 		blob = picked.textures[0]
@@ -189,6 +190,7 @@ async function assemble() {
 		const made = await HalcyonModel.strip(images)
 		blob = made.blob
 		joined = made.frames
+		fitted = made.fitted ?? 0
 		image = await loadImage(made.blob)
 	}
 
@@ -202,7 +204,7 @@ async function assemble() {
 	}
 
 	const frames = joined > 1 ? joined : HalcyonModel.frames(model, image)
-	return { model, image, blob, meta, joined, frames }
+	return { model, image, blob, meta, joined, fitted, frames }
 }
 
 /**
@@ -220,7 +222,9 @@ async function refreshPreview() {
 	pickedImage = null
 	pickedMcmeta = null
 	pickedFrames = 1
-	canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height)
+	// Handing the preview an empty picture also stops it turning, so a model that was dropped
+	// cannot keep spinning on a screen that says nothing is picked.
+	HalcyonModel.paintFlat(canvas, null, { frames: 1, frame: 0 })
 
 	if (picked.models.length === 0 && picked.textures.length === 0) {
 		note.textContent = "Pick a model and a texture to see it before anyone can wear it."
@@ -252,6 +256,13 @@ async function refreshPreview() {
 			built.joined > 1
 				? `${built.joined} pictures stacked into one ${built.image.naturalWidth}x${built.image.naturalHeight} strip`
 				: `texture ${built.image.naturalWidth}x${built.image.naturalHeight}`,
+		)
+	}
+	if (built.fitted > 0) {
+		lines.push(
+			built.fitted === 1
+				? "1 frame was smaller than the rest and was fitted onto the largest one"
+				: `${built.fitted} frames were smaller than the rest and were fitted onto the largest one`,
 		)
 	}
 	if (built.meta !== null && built.image === null) {
