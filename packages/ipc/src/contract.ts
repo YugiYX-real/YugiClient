@@ -40,15 +40,28 @@ import type {
 } from "./types.ts"
 
 /**
- * A cape from the Halcyon backend. The texture arrives as a data url because the window only
+ * A cosmetic from the Halcyon backend. The texture arrives as a data url because the window only
  * draws images from itself, data and https, while the backend answers on plain http.
+ *
+ * A cosmetic that moves is one tall picture with its frames stacked in it, so the size of the
+ * picture and the number of frames travel with it. Without those two the wardrobe can only show
+ * the whole strip squashed into a tile, which is why an animated pair of wings looked broken.
+ *
+ * A piece with its own model is not cape shaped, so it is shown whole rather than cropped to the
+ * rectangle a cape occupies on a skin sheet.
  */
 export type CosmeticEntry = {
 	readonly id: string
 	readonly name: string
 	readonly description: string
 	readonly rarity: string
+	readonly type: string
 	readonly textureUrl: string
+	readonly textureWidth: number
+	readonly textureHeight: number
+	readonly frames: number
+	readonly frameMs: number
+	readonly hasModel: boolean
 	readonly owned: boolean
 }
 
