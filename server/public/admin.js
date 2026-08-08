@@ -2,13 +2,21 @@
  * The admin panel.
  *
  * Publishing a cosmetic means uploading the model, a png, and an animation mcmeta when the thing
- * moves. A piece drawn as several modules can be picked as several model files at once, and they
- * are joined here into the one model the client builds from. The model and the mcmeta are read in
- * the browser and reduced to the small shapes the client understands, and the same reduced pair is
- * what the preview above the button is drawn from, so what is on screen is what every client gets.
+ * moves. Everything can be picked more than once: a piece drawn as several modules is picked as
+ * several model files and joined into one model, and an animation can be picked as its separate
+ * frames, which are stacked here into the one tall png the game plays. Every picked file is listed
+ * under the pickers with a button to drop it again, because a file input on its own cannot have a
+ * single file taken out of it.
+ *
+ * The model and the mcmeta are read in the browser and reduced to the small shapes the client
+ * understands, and the same reduced pair is what the preview above the button is drawn from, so
+ * what is on screen is what every client gets.
  */
 
 let announcements = []
+
+/** Everything picked for the cosmetic that is being published. */
+const picked = { models: [], textures: [], mcmeta: [] }
 
 // What the preview is currently showing.
 let pickedModel = null
@@ -33,9 +41,11 @@ function safeName(name) {
 	return String(name).replace(/[^A-Za-z0-9._-]+/g, "-")
 }
 
-/** Every model file that is picked, in the order the browser hands them over. */
-function modelFiles() {
-	return Array.from(document.getElementById("c-model").files ?? [])
+/** The last part of a stored path, which is the name the file is served under. */
+function fileName(path) {
+	const value = String(path ?? "")
+	const cut = value.lastIndexOf("/")
+	return cut === -1 ? value : value.slice(cut + 1)
 }
 
 /** A box left empty means "leave it to the kind", so nothing is sent for it. */
@@ -56,7 +66,7 @@ function optionalFlag(id) {
 	return value === "no" ? false : undefined
 }
 
-/** Loads a picked png so the preview can take pieces out of it. */
+/** Loads a picked png, or a strip built here, so the preview can take pieces out of it. */
 function loadImage(file) {
 	return new Promise((resolve, reject) => {
 		const url = URL.createObjectURL(file)
@@ -70,6 +80,71 @@ function loadImage(file) {
 			reject(new Error("that png could not be read"))
 		})
 		image.src = url
+	})
+}
+
+/**
+ * Adds newly picked files to what is already there.
+ *
+ * Picking again adds rather than replaces, so a set of frames can be gathered from several folders.
+ * The same file picked twice is only kept once, and an mcmeta is a single file, so a new one
+ * replaces the old one instead of piling up.
+ */
+function addFiles(kind, list) {
+	const chosen = Array.from(list ?? [])
+	if (chosen.length === 0) {
+		return
+	}
+
+	if (kind === "mcmeta") {
+		picked.mcmeta = [chosen[0]]
+		return
+	}
+
+	for (const file of chosen) {
+		const already = picked[kind].some(
+			(entry) => entry.name === file.name && entry.size === file.size,
+		)
+		if (!already) {
+			picked[kind].push(file)
+		}
+	}
+}
+
+/** Draws the list of picked files, each with a button that takes it back out. */
+function paintPicked() {
+	const host = document.getElementById("c-files")
+	const groups = [
+		{ kind: "models", label: "Model" },
+		{ kind: "textures", label: "Texture" },
+		{ kind: "mcmeta", label: "Animation" },
+	]
+
+	const rows = []
+	for (const group of groups) {
+		picked[group.kind].forEach((file, index) => {
+			rows.push(
+				`<tr>` +
+					`<td><span class="tag">${group.label}</span></td>` +
+					`<td>${Halcyon.escape(file.name)}</td>` +
+					`<td>${bytes(file.size)}</td>` +
+					`<td><button class="button small danger unpick" data-kind="${group.kind}" data-index="${index}">Remove</button></td>` +
+					`</tr>`,
+			)
+		})
+	}
+
+	host.innerHTML =
+		rows.length === 0
+			? '<div class="empty">Nothing picked yet.</div>'
+			: `<table><thead><tr><th>Part</th><th>File</th><th>Size</th><th></th></tr></thead><tbody>${rows.join("")}</tbody></table>`
+
+	host.querySelectorAll(".unpick").forEach((button) => {
+		button.addEventListener("click", () => {
+			picked[button.dataset.kind].splice(Number(button.dataset.index), 1)
+			paintPicked()
+			refreshPreview().catch((error) => Halcyon.toast(error.message, true))
+		})
 	})
 }
 
@@ -91,7 +166,47 @@ function drawFrame(frame) {
 }
 
 /**
- * Reads the picked files and shows the piece before it exists anywhere.
+ * Reads everything that is picked and builds the exact pair that will be uploaded.
+ *
+ * This is deliberately the only place the files are turned into a cosmetic, so the preview and the
+ * publish button can never disagree about what the piece is.
+ */
+async function assemble() {
+	const model = picked.models.length === 0 ? null : await HalcyonModel.fromFiles(picked.models)
+
+	let image = null
+	let blob = null
+	let joined = 0
+
+	if (picked.textures.length === 1) {
+		blob = picked.textures[0]
+		image = await loadImage(blob)
+	} else if (picked.textures.length > 1) {
+		const images = []
+		for (const file of picked.textures) {
+			images.push(await loadImage(file))
+		}
+		const made = await HalcyonModel.strip(images)
+		blob = made.blob
+		joined = made.frames
+		image = await loadImage(made.blob)
+	}
+
+	let meta = null
+	if (picked.mcmeta.length > 0) {
+		meta = await HalcyonModel.mcmetaFromFile(picked.mcmeta[0])
+	} else if (joined > 1) {
+		// Frames were picked one by one, so the animation is obvious and the mcmeta is written here
+		// rather than demanded of whoever is publishing.
+		meta = HalcyonModel.mcmetaFor(2)
+	}
+
+	const frames = joined > 1 ? joined : HalcyonModel.frames(model, image)
+	return { model, image, blob, meta, joined, frames }
+}
+
+/**
+ * Shows the piece before it exists anywhere.
  *
  * An animation plays here on a timer at the frametime out of the mcmeta, which is the same speed the
  * game will play it at, so a wing that flaps too fast can be fixed before anybody is given it.
@@ -99,9 +214,6 @@ function drawFrame(frame) {
 async function refreshPreview() {
 	const note = document.getElementById("c-preview")
 	const canvas = document.getElementById("c-canvas")
-	const models = modelFiles()
-	const textureFile = document.getElementById("c-file").files[0]
-	const metaFile = document.getElementById("c-mcmeta").files[0]
 
 	stopTicker()
 	pickedModel = null
@@ -110,51 +222,52 @@ async function refreshPreview() {
 	pickedFrames = 1
 	canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height)
 
-	const lines = []
+	if (picked.models.length === 0 && picked.textures.length === 0) {
+		note.textContent = "Pick a model and a texture to see it before anyone can wear it."
+		return
+	}
+
+	let built = null
 	try {
-		if (textureFile !== undefined) {
-			pickedImage = await loadImage(textureFile)
-			lines.push(
-				`texture ${pickedImage.naturalWidth}x${pickedImage.naturalHeight}, ${bytes(textureFile.size)}`,
-			)
-		}
-		if (models.length > 0) {
-			pickedModel = await HalcyonModel.fromFiles(models)
-			if (models.length > 1) {
-				lines.push(`${models.length} model files joined`)
-			}
-			lines.push(HalcyonModel.describe(pickedModel))
-		}
-		if (metaFile !== undefined) {
-			pickedMcmeta = await HalcyonModel.mcmetaFromFile(metaFile)
-		}
+		built = await assemble()
 	} catch (error) {
 		note.textContent = error.message
 		return
 	}
 
-	if (pickedMcmeta !== null) {
-		if (pickedImage === null) {
-			lines.push("an animation also needs the png with the frames stacked in it")
-		} else {
-			pickedFrames = HalcyonModel.frames(pickedModel, pickedImage)
-			lines.push(
-				pickedFrames > 1
-					? `animated, ${pickedFrames} frames at ${pickedMcmeta.frameMs}ms`
-					: "the mcmeta says animated but the png holds a single frame",
-			)
-		}
-	}
+	pickedModel = built.model
+	pickedImage = built.image
+	pickedMcmeta = built.meta
+	pickedFrames = built.frames
 
-	if (pickedModel === null && pickedImage === null) {
-		note.textContent = "Pick a model and a texture to see it before anyone can wear it."
-		return
+	const lines = []
+	if (picked.models.length > 1) {
+		lines.push(`${picked.models.length} model files joined`)
 	}
-
-	if (pickedModel !== null && pickedImage === null) {
+	if (built.model !== null) {
+		lines.push(HalcyonModel.describe(built.model))
+	}
+	if (built.image !== null) {
+		lines.push(
+			built.joined > 1
+				? `${built.joined} pictures stacked into one ${built.image.naturalWidth}x${built.image.naturalHeight} strip`
+				: `texture ${built.image.naturalWidth}x${built.image.naturalHeight}`,
+		)
+	}
+	if (built.meta !== null && built.image === null) {
+		lines.push("an animation also needs the png with the frames in it")
+	}
+	if (built.meta !== null && built.image !== null) {
+		lines.push(
+			built.frames > 1
+				? `animated, ${built.frames} frames at ${built.meta.frameMs}ms`
+				: "the mcmeta says animated but the png holds a single frame",
+		)
+	}
+	if (built.model !== null && built.image === null) {
 		lines.push("no texture picked yet, so the boxes are drawn plain")
 	}
-	if (pickedModel === null && pickedImage !== null) {
+	if (built.model === null && built.image !== null) {
 		lines.push("no model picked, so this is worn flat like a cape")
 	}
 
@@ -275,6 +388,28 @@ function describe(cosmetic) {
 	return parts.join(", ")
 }
 
+/** The files one published cosmetic is made of, each with a button that deletes just that file. */
+function assets(cosmetic) {
+	const rows = [
+		{ label: "texture", path: cosmetic.texture },
+		{ label: "model", path: cosmetic.model },
+		{ label: "animation", path: cosmetic.mcmeta },
+	]
+		.filter((row) => typeof row.path === "string" && row.path !== "")
+		.map((row) => {
+			const name = fileName(row.path)
+			return (
+				`<div class="row" style="margin-top:0.35rem">` +
+				`<span class="tag">${row.label}</span>` +
+				`<a href="${Halcyon.escape(row.path)}" target="_blank" rel="noreferrer">${Halcyon.escape(name)}</a>` +
+				`<button class="button small danger drop-asset" data-file="${Halcyon.escape(name)}">Delete file</button>` +
+				`</div>`
+			)
+		})
+
+	return rows.length === 0 ? '<div class="hint">No files uploaded for this one.</div>' : rows.join("")
+}
+
 async function load() {
 	const user = await Halcyon.guard(true)
 	if (user === null) {
@@ -321,11 +456,28 @@ async function load() {
 						Halcyon.capeCard(
 							cosmetic,
 							`<div class="hint">${Halcyon.escape(describe(cosmetic))}</div>` +
-								`<button class="button small danger drop" data-id="${Halcyon.escape(cosmetic.id)}" style="margin-top:0.5rem">Delete</button>`,
+								assets(cosmetic) +
+								`<button class="button small danger drop" data-id="${Halcyon.escape(cosmetic.id)}" style="margin-top:0.5rem">Delete cosmetic</button>`,
 						),
 					)
 					.join("") +
 				"</div>"
+
+	document.querySelectorAll(".drop-asset").forEach((button) => {
+		button.addEventListener("click", async () => {
+			const name = button.dataset.file
+			if (!window.confirm(`Delete the file ${name}?`)) {
+				return
+			}
+			try {
+				await Halcyon.api(`/v1/cosmetics/textures/${name}`, { method: "DELETE" })
+				Halcyon.toast(`${name} deleted`)
+				load()
+			} catch (error) {
+				Halcyon.toast(error.message, true)
+			}
+		})
+	})
 
 	document.querySelectorAll(".drop").forEach((button) => {
 		button.addEventListener("click", async () => {
@@ -460,7 +612,7 @@ async function publishVersion() {
 	const chosen = Array.from(document.getElementById("u-files").files)
 
 	if (!/^[0-9]+\.[0-9]+\.[0-9]+/.test(version)) {
-		Halcyon.toast("a version like 1.2.5 is required", true)
+		Halcyon.toast("a version like 1.2.8 is required", true)
 		return
 	}
 
@@ -505,8 +657,8 @@ async function publishVersion() {
  * Publishes one cosmetic: the texture, the model, the animation mcmeta, and the record that ties
  * them together.
  *
- * Nothing is guessed from the preview: every file is read again here, in case one was swapped after
- * it was drawn. Several model files are joined into the single model.json the client downloads.
+ * Everything is read again here rather than taken from the preview, in case a file was dropped or
+ * added after it was drawn.
  */
 async function publishCosmetic() {
 	const button = document.getElementById("publish")
@@ -518,46 +670,43 @@ async function publishCosmetic() {
 		return
 	}
 
-	const textureFile = document.getElementById("c-file").files[0]
-	const models = modelFiles()
-	const metaFile = document.getElementById("c-mcmeta").files[0]
-
 	button.disabled = true
 	try {
-		const model = models.length === 0 ? null : await HalcyonModel.fromFiles(models)
-		const meta = metaFile === undefined ? null : await HalcyonModel.mcmetaFromFile(metaFile)
-		const image = textureFile === undefined ? null : await loadImage(textureFile)
+		const built = await assemble()
 
-		if (meta !== null && image === null) {
+		if (built.meta !== null && built.blob === null) {
 			throw new Error("an animated cosmetic needs the png with the frames in it as well")
 		}
 
-		if (textureFile !== undefined) {
-			status.textContent = `Uploading the texture, ${bytes(textureFile.size)}`
+		if (built.blob !== null) {
+			status.textContent =
+				built.joined > 1
+					? `Uploading ${built.joined} frames joined into one strip, ${bytes(built.blob.size)}`
+					: `Uploading the texture, ${bytes(built.blob.size)}`
 			await Halcyon.api(`/v1/cosmetics/textures/${id}.png`, {
 				method: "PUT",
-				body: textureFile,
+				body: built.blob,
 				raw: true,
 			})
 		}
 
-		if (model !== null) {
+		if (built.model !== null) {
 			status.textContent =
-				models.length === 1
-					? `Uploading the model, ${model.cubes.length} boxes`
-					: `Uploading ${models.length} model files joined into ${model.cubes.length} boxes`
+				picked.models.length === 1
+					? `Uploading the model, ${built.model.cubes.length} boxes`
+					: `Uploading ${picked.models.length} model files joined into ${built.model.cubes.length} boxes`
 			await Halcyon.api(`/v1/cosmetics/textures/${id}.model.json`, {
 				method: "PUT",
-				body: new Blob([JSON.stringify(model)], { type: "application/json" }),
+				body: new Blob([JSON.stringify(built.model)], { type: "application/json" }),
 				raw: true,
 			})
 		}
 
-		if (meta !== null) {
+		if (built.meta !== null) {
 			status.textContent = "Uploading the animation"
 			await Halcyon.api(`/v1/cosmetics/textures/${id}.mcmeta.json`, {
 				method: "PUT",
-				body: new Blob([JSON.stringify(meta.mcmeta)], { type: "application/json" }),
+				body: new Blob([JSON.stringify(built.meta.mcmeta)], { type: "application/json" }),
 				raw: true,
 			})
 		}
@@ -571,15 +720,15 @@ async function publishCosmetic() {
 		}
 
 		// Only sent when a model was picked, so editing a name cannot drop an existing model.
-		if (model !== null) {
+		if (built.model !== null) {
 			body.model = `/v1/cosmetics/textures/${id}.model.json`
 		}
 
-		if (meta !== null) {
+		if (built.meta !== null) {
 			body.mcmeta = `/v1/cosmetics/textures/${id}.mcmeta.json`
-			body.frames = HalcyonModel.frames(model, image)
-			body.frameMs = meta.frameMs
-		} else if (textureFile !== undefined) {
+			body.frames = built.frames
+			body.frameMs = built.meta.frameMs
+		} else if (built.blob !== null) {
 			// A new texture with no mcmeta beside it is a still picture, so any animation that was
 			// on this cosmetic before is cleared rather than left playing over the new png.
 			body.mcmeta = ""
@@ -637,8 +786,17 @@ document.getElementById("save-announcements").addEventListener("click", async ()
 	}
 })
 
-for (const picker of ["c-model", "c-file", "c-mcmeta"]) {
-	document.getElementById(picker).addEventListener("change", () => {
+for (const picker of [
+	{ id: "c-model", kind: "models" },
+	{ id: "c-file", kind: "textures" },
+	{ id: "c-mcmeta", kind: "mcmeta" },
+]) {
+	document.getElementById(picker.id).addEventListener("change", (event) => {
+		addFiles(picker.kind, event.target.files)
+		// The input is emptied so the same file can be picked again after it was dropped, and so
+		// the list below is the only thing that decides what gets uploaded.
+		event.target.value = ""
+		paintPicked()
 		refreshPreview().catch((error) => Halcyon.toast(error.message, true))
 	})
 }
@@ -648,4 +806,5 @@ document.getElementById("publish").addEventListener("click", publishCosmetic)
 document.getElementById("grant").addEventListener("click", () => handout("grant"))
 document.getElementById("revoke").addEventListener("click", () => handout("revoke"))
 
+paintPicked()
 load().catch((error) => Halcyon.say("message", error.message))
