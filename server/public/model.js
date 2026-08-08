@@ -11,11 +11,21 @@
  * it recognises, wherever it is: a pair of corners, a Bedrock origin and size, a .jem coordinates
  * list, or the corner points of a mesh.
  *
+ * They also disagree about which way is up and about where nothing is. This is the single thing
+ * that decides whether a wing ends up on a back or floating above a head, so it is worth stating
+ * exactly. A model drawn in Blockbench, in Bedrock or in glTF is drawn standing on the floor: y
+ * grows upwards and y nought is the ground under the feet. The game builds entity models the other
+ * way up and from the neck: y grows downwards and y nought is the shoulders, which puts the top of
+ * the head at minus eight and the soles of the feet at twenty four. So a box drawn between fourteen
+ * and twenty four in a modelling program, which is the upper back, becomes zero to ten here.
+ * Negating alone is not enough, the floor has to be subtracted as well, and a piece that is only
+ * negated lands a whole body height too high. A .jem and a Blockbench entity project are already
+ * written the game's way round and are taken exactly as they stand.
+ *
  * A .gltf and a .glb are read as well, with one caveat that is stated plainly rather than hidden:
  * glTF is a triangle mesh format and the game builds boxes, so every mesh part comes across as the
- * box it fits inside. Coordinates come out in the space Minecraft entity models use, where y grows
- * downwards, so the mod can hand them straight to a model builder. Turning is deliberately ignored
- * everywhere, because a box that has been turned is no longer a box.
+ * box it fits inside. Turning is deliberately ignored everywhere, because a box that has been
+ * turned is no longer a box.
  *
  * The preview turns the piece in three dimensions, textured, next to a ghost of a player body, and
  * can be dragged with the mouse. That is the point of it: a wing is judged by how big it is next to
@@ -40,6 +50,18 @@ window.HalcyonModel = (() => {
 	const FORMAT = "halcyon-model-1"
 	const MAX_CUBES = 128
 	const MAX_FRAMES = 64
+
+	/**
+	 * How far the floor is below the shoulders, in model pixels.
+	 *
+	 * A player is twenty four pixels from the soles of the feet to the neck, and the neck is where an
+	 * entity model measures from. This is the number that moves a piece drawn on the floor onto the
+	 * body it is worn on.
+	 */
+	const FLOOR = 24
+
+	/** Written into every model this file produces, to mark it as measured from the body. */
+	const ORIGIN = "body"
 
 	/** How deep into a file the walk goes before it gives up, which no model comes close to. */
 	const MAX_DEPTH = 16
@@ -114,18 +136,19 @@ window.HalcyonModel = (() => {
 	/**
 	 * One box in the shape the client builds from.
 	 *
-	 * Entity model space has y growing downwards, so a file authored the usual way round, with y
-	 * growing upwards, has its top corner negated. A .jem is already written in entity space and is
-	 * taken as it stands, which is what the upwards flag is for.
+	 * A file drawn standing on the floor has its top corner both negated and lifted onto the body, so
+	 * the twenty four pixels between the floor and the shoulders do not end up as twenty four pixels
+	 * of empty air above the head. A file already written the game's way round is taken as it stands,
+	 * which is what the standing flag is for.
 	 */
-	function boxOf(name, from, to, uv, inflate, upwards) {
+	function boxOf(name, from, to, uv, inflate, standing) {
 		const low = [0, 1, 2].map((axis) => Math.min(Number(from[axis]), Number(to[axis])))
 		const high = [0, 1, 2].map((axis) => Math.max(Number(from[axis]), Number(to[axis])))
 
 		return {
 			name: String(name ?? "").slice(0, 40),
 			x: round(low[0]),
-			y: round(upwards ? -high[1] : low[1]),
+			y: round(standing ? FLOOR - high[1] : low[1]),
 			z: round(low[2]),
 			width: round(high[0] - low[0]),
 			height: round(high[1] - low[1]),
@@ -161,17 +184,17 @@ window.HalcyonModel = (() => {
 	 * Each branch is a different program's idea of a box:
 	 *   from and to        a Blockbench .bbmodel or a Java model .json
 	 *   origin and size    a Bedrock geometry, whether under bones or anywhere else
-	 *   coordinates        an OptiFine .jem, already in entity space
+	 *   coordinates        an OptiFine .jem, already written the game's way round
 	 *   vertices           a Blockbench mesh, reduced to the box it fits inside
 	 */
-	function harvest(node, out, depth) {
+	function harvest(node, out, depth, standing) {
 		if (node === null || typeof node !== "object" || depth > MAX_DEPTH || out.length >= MAX_CUBES) {
 			return
 		}
 
 		if (Array.isArray(node)) {
 			for (const entry of node) {
-				harvest(entry, out, depth + 1)
+				harvest(entry, out, depth + 1, standing)
 			}
 			return
 		}
@@ -182,12 +205,12 @@ window.HalcyonModel = (() => {
 		if (!hidden) {
 			if (triple(node.from) && triple(node.to)) {
 				const depthOf = Math.abs(Number(node.to[2]) - Number(node.from[2]))
-				out.push(boxOf(name, node.from.map(Number), node.to.map(Number), uvOf(node, depthOf), node.inflate, true))
+				out.push(boxOf(name, node.from.map(Number), node.to.map(Number), uvOf(node, depthOf), node.inflate, standing))
 			} else if (triple(node.origin) && triple(node.size)) {
 				const origin = node.origin.map(Number)
 				const size = node.size.map(Number)
 				const to = [0, 1, 2].map((axis) => origin[axis] + size[axis])
-				out.push(boxOf(name, origin, to, uvOf(node, Math.abs(size[2])), node.inflate, true))
+				out.push(boxOf(name, origin, to, uvOf(node, Math.abs(size[2])), node.inflate, standing))
 			} else if (Array.isArray(node.coordinates) && node.coordinates.length >= 6) {
 				const cells = node.coordinates.slice(0, 6).map(Number)
 				if (cells.every((cell) => Number.isFinite(cell))) {
@@ -199,7 +222,7 @@ window.HalcyonModel = (() => {
 			} else if (node.vertices !== undefined && node.vertices !== null) {
 				const corners = meshCorners(node)
 				if (corners !== null) {
-					out.push(boxOf(name, corners.from, corners.to, uvOf(node, 0), 0, true))
+					out.push(boxOf(name, corners.from, corners.to, uvOf(node, 0), 0, standing))
 				}
 			}
 		}
@@ -208,7 +231,61 @@ window.HalcyonModel = (() => {
 			if (SKIP_KEYS.has(key)) {
 				continue
 			}
-			harvest(node[key], out, depth + 1)
+			harvest(node[key], out, depth + 1, standing)
+		}
+	}
+
+	/**
+	 * Whether a file was already written the way the game measures entities, from the neck and
+	 * downwards, rather than standing on the floor.
+	 *
+	 * Blockbench records which kind of project a file came from, and its entity projects are drawn in
+	 * the game's own space. An OptiFine .jem is as well, and is recognised by its list of named parts.
+	 * Everything else is drawn standing on the floor.
+	 */
+	function entitySpaced(json) {
+		const format = String(json?.meta?.model_format ?? json?.model_format ?? "")
+		if (/entity/i.test(format)) {
+			return true
+		}
+		return (
+			Array.isArray(json?.models) &&
+			json.models.some((entry) => entry !== null && typeof entry === "object" && typeof entry.part === "string")
+		)
+	}
+
+	/**
+	 * Turns parsed json into the client shape.
+	 *
+	 * Throws with a plain sentence when the file holds nothing to build, and says what the file did
+	 * hold, because being told only that a model has no boxes when it plainly does is useless.
+	 */
+	function normalise(json) {
+		if (json === null || typeof json !== "object") {
+			throw new Error("that file is not a model")
+		}
+
+		const cubes = []
+		harvest(json, cubes, 0, !entitySpaced(json))
+
+		const usable = cubes.filter((cube) => cube.width > 0 || cube.height > 0 || cube.depth > 0)
+		if (usable.length === 0) {
+			const keys = Object.keys(json).slice(0, 8).join(", ")
+			throw new Error(
+				"no boxes could be read out of that file" +
+					(keys === "" ? "" : ` (it holds: ${keys})`) +
+					". A .bbmodel, a Java model .json, a Bedrock geometry .json, an OptiFine .jem, a .gltf and " +
+					"a .glb are all read, so if this is one of those, send the file and it gets taught here.",
+			)
+		}
+
+		const size = sheetOf(json, 0) ?? [64, 64]
+		return {
+			format: FORMAT,
+			origin: ORIGIN,
+			textureWidth: size[0],
+			textureHeight: size[1],
+			cubes: usable.slice(0, MAX_CUBES),
 		}
 	}
 
@@ -261,40 +338,6 @@ window.HalcyonModel = (() => {
 			}
 		}
 		return null
-	}
-
-	/**
-	 * Turns parsed json into the client shape.
-	 *
-	 * Throws with a plain sentence when the file holds nothing to build, and says what the file did
-	 * hold, because being told only that a model has no boxes when it plainly does is useless.
-	 */
-	function normalise(json) {
-		if (json === null || typeof json !== "object") {
-			throw new Error("that file is not a model")
-		}
-
-		const cubes = []
-		harvest(json, cubes, 0)
-
-		const usable = cubes.filter((cube) => cube.width > 0 || cube.height > 0 || cube.depth > 0)
-		if (usable.length === 0) {
-			const keys = Object.keys(json).slice(0, 8).join(", ")
-			throw new Error(
-				"no boxes could be read out of that file" +
-					(keys === "" ? "" : ` (it holds: ${keys})`) +
-					". A .bbmodel, a Java model .json, a Bedrock geometry .json, an OptiFine .jem, a .gltf and " +
-					"a .glb are all read, so if this is one of those, send the file and it gets taught here.",
-			)
-		}
-
-		const size = sheetOf(json, 0) ?? [64, 64]
-		return {
-			format: FORMAT,
-			textureWidth: size[0],
-			textureHeight: size[1],
-			cubes: usable.slice(0, MAX_CUBES),
-		}
 	}
 
 	/** True for the two glTF endings, which are read differently from the json models. */
@@ -517,9 +560,9 @@ window.HalcyonModel = (() => {
 			cubes.push({
 				name: String(box.name).slice(0, 40),
 				x: round(box.min[0] * perUnit),
-				// glTF has y growing upwards like Blockbench, and entity model space has it growing
-				// downwards, so the top corner is negated exactly as it is for a .bbmodel.
-				y: round(-box.max[1] * perUnit),
+				// glTF is drawn standing on the floor like Blockbench, so the top corner is both negated
+				// and lifted onto the body, exactly as it is for a .bbmodel.
+				y: round(FLOOR - box.max[1] * perUnit),
 				z: round(box.min[2] * perUnit),
 				width: round((box.max[0] - box.min[0]) * perUnit),
 				height: round((box.max[1] - box.min[1]) * perUnit),
@@ -534,7 +577,7 @@ window.HalcyonModel = (() => {
 			}
 		}
 
-		return { format: FORMAT, textureWidth, textureHeight, cubes }
+		return { format: FORMAT, origin: ORIGIN, textureWidth, textureHeight, cubes }
 	}
 
 	/** The part of a file name that is worth keeping in front of a box name. */
@@ -597,9 +640,28 @@ window.HalcyonModel = (() => {
 
 		return {
 			format: FORMAT,
+			origin: ORIGIN,
 			textureWidth: first.model.textureWidth,
 			textureHeight: first.model.textureHeight,
 			cubes,
+		}
+	}
+
+	/**
+	 * Lifts a model that was saved before the floor was accounted for onto the body.
+	 *
+	 * Everything written from now on carries a mark saying it is measured from the body, so it is
+	 * left exactly as it is. A piece that was published earlier was only negated, which put it a full
+	 * body height too high, and it is moved down rather than being re-uploaded by hand.
+	 */
+	function settle(model) {
+		if (model === null || model === undefined || model.origin === ORIGIN) {
+			return model
+		}
+		return {
+			...model,
+			origin: ORIGIN,
+			cubes: (model.cubes ?? []).map((cube) => ({ ...cube, y: round(Number(cube.y) + FLOOR) })),
 		}
 	}
 
@@ -1085,7 +1147,7 @@ window.HalcyonModel = (() => {
 			last: 0,
 		}
 
-		state.model = model
+		state.model = settle(model)
 		state.image = image ?? null
 		state.frames = Math.max(1, Math.round(Number(settings.frames ?? 1)))
 		state.frame = Math.max(0, Math.round(Number(settings.frame ?? 0)))
@@ -1132,27 +1194,49 @@ window.HalcyonModel = (() => {
 		)
 	}
 
+	/** Where a piece sits down the body, said in words rather than in numbers. */
+	function height(box) {
+		if (box.bottom < -8) {
+			return "floating above the head"
+		}
+		if (box.top > 24) {
+			return "below the feet"
+		}
+		if (box.bottom <= 0) {
+			return "on the head"
+		}
+		if (box.top >= 12) {
+			return "from the hips down"
+		}
+		return "across the back"
+	}
+
 	/** One sentence about a model, shown next to the preview. */
 	function describe(model) {
-		const box = bounds(model)
-		const count = model.cubes.length
-		const deep = model.cubes.reduce((most, cube) => Math.max(most, cube.z + cube.depth), 0)
+		const worn = settle(model)
+		const box = bounds(worn)
+		const count = worn.cubes.length
+		const deep = worn.cubes.reduce((most, cube) => Math.max(most, cube.z + cube.depth), 0)
 		return (
 			`${count} ${count === 1 ? "box" : "boxes"}, ` +
 			`${round(box.width)} wide by ${round(box.height)} tall, ` +
+			`worn ${height(box)}, ` +
 			`${round(Math.max(0, deep))} behind the back, ` +
-			`texture ${model.textureWidth}x${model.textureHeight}. Drag the preview to turn it.`
+			`texture ${worn.textureWidth}x${worn.textureHeight}. Drag the preview to turn it.`
 		)
 	}
 
 	return {
 		FORMAT,
+		FLOOR,
+		ORIGIN,
 		MAX_CUBES,
 		MAX_FRAMES,
 		MODEL_EXTENSIONS,
 		normalise,
 		normaliseGltf,
 		merge,
+		settle,
 		fromFile,
 		fromFiles,
 		strip,
