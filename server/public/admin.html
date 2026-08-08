@@ -119,7 +119,7 @@
 				<section class="section">
 					<div class="section-head">
 						<h2>Create a cosmetic</h2>
-						<p>One model and one texture, whatever the thing is</p>
+						<p>A model, a png, and an mcmeta when it moves</p>
 					</div>
 					<div class="card">
 						<div class="inline">
@@ -145,6 +145,11 @@
 									<option value="aura">Aura</option>
 									<option value="trail">Trail</option>
 								</select>
+								<div class="hint">
+									One of every kind is worn at a time, so a cape, a pair of wings and a
+									shield are all on the player together and only a second cape takes the
+									first one off.
+								</div>
 							</div>
 							<div class="field">
 								<label for="c-rarity">Rarity</label>
@@ -180,6 +185,16 @@
 								<div class="hint">
 									The texture the model is painted with. Transparency is kept. A cape
 									needs no model at all, just the usual 64x32 sheet.
+								</div>
+							</div>
+							<div class="field">
+								<label for="c-mcmeta">Animation, .mcmeta</label>
+								<input id="c-mcmeta" type="file" accept=".mcmeta,.json,application/json" />
+								<div class="hint">
+									Only for something that moves. Stack the frames down the png, one under
+									the other, each as tall as the sheet the model was drawn against, and
+									pick the mcmeta that belongs beside it. It is the ordinary Minecraft
+									file, so <code>{"animation":{"frametime":2}}</code> is a complete one.
 								</div>
 							</div>
 						</div>
