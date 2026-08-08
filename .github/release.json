@@ -1,5 +1,5 @@
 {
-  "tag": "v1.2.5",
-  "requestedAt": "2026-08-08T04:10:00Z",
-  "summary": "Wings, hats, halos, masks, shoulder pieces, auras and trails are drawn on their own model instead of being forced through the vanilla cape slot, so they no longer come out as a garbled cape, and animated pieces play frame by frame in the world. The owner's own picture ships inside the companion jar as the Minecraft main menu background. Cosmetic tiles on the website, the account page and the admin panel show square and animated pieces whole instead of cropping them like a cape sheet."
+  "tag": "v1.2.6",
+  "requestedAt": "2026-08-08T04:52:00Z",
+  "summary": "One of every kind of cosmetic is worn at a time, so a cape, a pair of wings and a shield are all on the player together and only a second cape takes the first one off. Wings and shields hang off the back tight against the body instead of hovering behind it. An animated cosmetic is now one png with its frames stacked in it plus the ordinary Minecraft animation mcmeta, and the admin panel takes that third file and plays the piece in its preview at the frametime written in it before anything is published."
 }
