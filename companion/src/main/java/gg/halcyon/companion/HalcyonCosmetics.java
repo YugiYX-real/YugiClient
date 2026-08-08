@@ -101,6 +101,21 @@ public final class HalcyonCosmetics {
 	/** More boxes than this in one piece is a mistake rather than a model. */
 	private static final int MAX_BOXES = 128;
 
+	/**
+	 * How far the floor is below the shoulders, in model pixels.
+	 *
+	 * <p>A modelling program draws a piece standing on the ground, with y growing upwards from the
+	 * soles of the feet. The game measures an entity model from the neck, with y growing downwards.
+	 * A player is twenty four pixels between the two, so a piece that was only turned upside down
+	 * and never moved lands a whole body height too high, which is a pair of wings hovering above
+	 * the head. Anything published from now on is written already measured from the body and says so;
+	 * anything published before that is moved down here rather than having to be uploaded again.
+	 */
+	private static final float FLOOR = 24.0F;
+
+	/** The mark a model carries once it is measured the way the game wears it. */
+	private static final String BODY_ORIGIN = "body";
+
 	private final HttpClient http =
 			HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 
@@ -846,7 +861,14 @@ public final class HalcyonCosmetics {
 				});
 	}
 
-	/** Reads the published model into boxes, or null when there is nothing usable in it. */
+	/**
+	 * Reads the published model into boxes, or null when there is nothing usable in it.
+	 *
+	 * <p>A model that says it is measured from the body is taken exactly as it stands. One that says
+	 * nothing was published before the floor was accounted for, so every box is moved down by the
+	 * height of a player: that is the difference between a pair of wings on a back and a pair of
+	 * wings hovering over a head, and it is done here so nothing has to be uploaded twice.
+	 */
 	private static HalcyonCosmeticModel.Shape parseShape(String body) {
 		try {
 			JsonElement root = JsonParser.parseString(body);
@@ -860,6 +882,8 @@ public final class HalcyonCosmetics {
 				return null;
 			}
 
+			float lift = BODY_ORIGIN.equals(text(object, "origin")) ? 0.0F : FLOOR;
+
 			List<HalcyonCosmeticModel.Box> boxes = new ArrayList<>();
 			for (JsonElement element : cubes) {
 				if (!element.isJsonObject()) {
@@ -870,7 +894,7 @@ public final class HalcyonCosmetics {
 				boxes.add(new HalcyonCosmeticModel.Box(
 						text(cube, "name"),
 						decimal(cube, "x", 0.0F),
-						decimal(cube, "y", 0.0F),
+						decimal(cube, "y", 0.0F) + lift,
 						decimal(cube, "z", 0.0F),
 						decimal(cube, "width", 0.0F),
 						decimal(cube, "height", 0.0F),
