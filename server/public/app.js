@@ -155,22 +155,28 @@ const Halcyon = (() => {
 		return type === "" ? "cape" : type
 	}
 
+	/** The still picture every cosmetic has, whatever else it also has. */
+	function stillUrl(cosmetic) {
+		const texture = String(cosmetic?.texture ?? "")
+		if (texture !== "") {
+			return texture
+		}
+		return `/v1/cosmetics/textures/${String(cosmetic?.id ?? "")}.png`
+	}
+
 	/**
 	 * The picture to show for a cosmetic.
 	 *
-	 * Animated cosmetics keep their gif, because a gif animates in an img or a background on its own
-	 * and needs no javascript at all. Everything else falls back to the still texture.
+	 * Animated cosmetics point at their gif, because a gif animates on its own and needs no
+	 * javascript at all. Tiles fall back to the still picture when there is no gif, so a cosmetic
+	 * built from single frames still shows something.
 	 */
 	function cosmeticUrl(cosmetic) {
 		const id = String(cosmetic?.id ?? "")
 		if (cosmetic?.animated === true && id !== "") {
 			return `/v1/cosmetics/textures/${id}.gif`
 		}
-		const texture = String(cosmetic?.texture ?? "")
-		if (texture === "") {
-			return `/v1/cosmetics/textures/${id}.png`
-		}
-		return texture
+		return stillUrl(cosmetic)
 	}
 
 	/** Kept under its old name so older pages keep working. */
@@ -181,23 +187,25 @@ const Halcyon = (() => {
 	/**
 	 * One cosmetic tile, used by the catalogue, the account page and the admin panel.
 	 *
-	 * A cape is a 64x32 sheet where only one region is the visible cloth, so it stays cropped. Wings,
-	 * hats, halos and the rest are whole pictures, often square gif frames, and cropping those is
-	 * what made them look empty, so they are shown complete and centred instead.
+	 * A cape is a 64x32 sheet where only one region is the visible cloth, so it stays cropped to that
+	 * region. Wings, hats, halos and the rest are whole pictures, often square, and cropping those is
+	 * what made them look empty, so they are shown complete in a picture element instead. If the
+	 * animation is missing the picture quietly swaps itself for the still frame.
 	 */
 	function capeCard(cosmetic, extra = "") {
 		const kind = kindOf(cosmetic)
 		const url = escape(cosmeticUrl(cosmetic))
+		const still = escape(stillUrl(cosmetic))
 		const art =
 			kind === "cape"
 				? `<div class="cape" style="background-image:url('${url}')"></div>`
-				: `<div class="cape" style="background-image:url('${url}');width:96px;height:96px;background-size:contain;background-position:center;background-repeat:no-repeat"></div>`
-		const badge = cosmetic?.animated === true ? " &middot; animated" : ""
+				: `<img src="${url}" alt="" loading="lazy" onerror="this.onerror=null;this.src='${still}'" style="width:96px;height:96px;object-fit:contain;image-rendering:pixelated" />`
+		const moving = cosmetic?.animated === true ? " &middot; animated" : ""
 		return `
 			<div class="cape-card">
 				${art}
 				<div class="name">${escape(cosmetic.name ?? cosmetic.id)}</div>
-				<div class="meta">${escape(cosmetic.rarity ?? "common")} &middot; ${escape(kind)}${badge}</div>
+				<div class="meta">${escape(cosmetic.rarity ?? "common")} &middot; ${escape(kind)}${moving}</div>
 				${extra}
 			</div>`
 	}
@@ -224,6 +232,7 @@ const Halcyon = (() => {
 		say,
 		clear,
 		kindOf,
+		stillUrl,
 		cosmeticUrl,
 		capeCard,
 		capeUrl,

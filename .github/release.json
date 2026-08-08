@@ -1,5 +1,5 @@
 {
-  "tag": "v1.2.4",
-  "requestedAt": "2026-08-07T04:14:00Z",
-  "summary": "The title screen is now the Halcyon menu: your own picture as the background, flat Halcyon buttons, a wordmark header and a live message from the backend. The badge now always decorates your own name, so it is visible on the tab screen without any configuration, and it can no longer stack up in front of a name. A dependency free backend service for roster, presence and branding ships in server/ with a one command install for Ubuntu 24.04."
+  "tag": "v1.2.5",
+  "requestedAt": "2026-08-08T04:10:00Z",
+  "summary": "Wings, hats, halos, masks, shoulder pieces, auras and trails are drawn on their own model instead of being forced through the vanilla cape slot, so they no longer come out as a garbled cape, and animated pieces play frame by frame in the world. The owner's own picture ships inside the companion jar as the Minecraft main menu background. Cosmetic tiles on the website, the account page and the admin panel show square and animated pieces whole instead of cropping them like a cape sheet."
 }
