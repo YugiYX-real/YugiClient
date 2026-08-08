@@ -1,34 +1,37 @@
 /*
- * Reads a model in the browser and reduces it to the small fixed shape the client builds from.
+ * Reads a model in the browser, reduces it to the small fixed shape the client builds from, and
+ * shows it the way it will actually be worn.
  *
  * There is no single model file in Minecraft, there are four, and a wing can arrive as any of them:
  * a Blockbench .bbmodel, a Java model .json, a Bedrock geometry .json (which is what Blockbench
  * writes by default and what most wings on the internet are) and an OptiFine .jem. They disagree
  * about almost everything, including where the boxes live: a .bbmodel keeps them in a flat list at
  * the top, a Bedrock geometry buries them under a geometry entry and a list of bones, and a .jem
- * puts them under models and submodels. Anything that only looked at the top of the file therefore
- * announced that a perfectly good model had no boxes in it.
+ * puts them under models and submodels. So the reader walks the whole file and picks up every box
+ * it recognises, wherever it is: a pair of corners, a Bedrock origin and size, a .jem coordinates
+ * list, or the corner points of a mesh.
  *
- * So the reader walks the whole file instead and picks up every box it recognises, wherever it is:
- * a pair of corners, a Bedrock origin and size, a .jem coordinates list, or the corner points of a
- * mesh. A .gltf and a .glb are read as well, with one caveat that is stated plainly rather than
- * hidden: glTF is a triangle mesh format and the game builds boxes, so every mesh part comes across
- * as the box it fits inside. Coordinates come out in the space Minecraft entity models use, where y
- * grows downwards, so the mod can hand them straight to a model builder.
+ * A .gltf and a .glb are read as well, with one caveat that is stated plainly rather than hidden:
+ * glTF is a triangle mesh format and the game builds boxes, so every mesh part comes across as the
+ * box it fits inside. Coordinates come out in the space Minecraft entity models use, where y grows
+ * downwards, so the mod can hand them straight to a model builder. Turning is deliberately ignored
+ * everywhere, because a box that has been turned is no longer a box.
  *
- * Turning is deliberately ignored everywhere. A box that has been turned is no longer a box, and
- * quietly pretending otherwise would put the piece somewhere it was never drawn.
+ * The preview turns the piece in three dimensions, textured, next to a ghost of a player body, and
+ * can be dragged with the mouse. That is the point of it: a wing is judged by how big it is next to
+ * a player and how far it sticks out behind one, and a flat picture of the front faces answers
+ * neither question. It is not a copy of Blockbench and does not try to be one; it draws exactly the
+ * pixels the game will put on those boxes, at the size and place the game will put them.
  *
  * A piece is often drawn as several modules, a left wing and a right wing and a harness, each saved
- * to its own file. Several files are read and joined into one model here, so the client still gets
- * one list of boxes and one texture. They have to be drawn against the same texture sheet, because
- * a cosmetic wears one png.
+ * to its own file. Several files are read and joined into one model here. They have to be drawn
+ * against the same texture sheet, because a cosmetic wears one png.
  *
  * An animated cosmetic is one tall png with the frames stacked in it and an animation mcmeta beside
  * it, which is the same pair Minecraft uses for its own animated textures. Several pngs picked at
- * once are stacked into that strip here, so drawing frame by frame is enough and nobody has to
- * assemble a sheet by hand. That is also why painting takes a frame number: the picture of one
- * frame is a window down the strip.
+ * once are stacked into that strip here, and frames that were saved at different sizes are fitted
+ * onto the largest one rather than refused, because a 32 by 32 frame among 64 by 64 frames is a
+ * normal thing to have in a folder and is not a reason to send someone back to an image editor.
  *
  * This hangs off the window rather than a bare const so the other scripts on the page can reach it.
  */
@@ -41,6 +44,9 @@ window.HalcyonModel = (() => {
 	/** How deep into a file the walk goes before it gives up, which no model comes close to. */
 	const MAX_DEPTH = 16
 
+	/** How fast the preview turns on its own, in radians a second. */
+	const SPIN = 0.5
+
 	/** The file endings a model can be read out of. */
 	const MODEL_EXTENSIONS = [".bbmodel", ".json", ".geo.json", ".jem", ".gltf", ".glb"]
 
@@ -51,6 +57,9 @@ window.HalcyonModel = (() => {
 	 * is the difference between reading a wing instantly and chewing through megabytes of picture.
 	 */
 	const SKIP_KEYS = new Set(["textures", "animations", "animation", "display", "history", "meta", "sounds", "particle_effects", "sound_effects"])
+
+	/** The preview state of every canvas that has been drawn on, so a redraw keeps the angle. */
+	const views = new WeakMap()
 
 	function round(value) {
 		return Math.round(Number(value) * 1000) / 1000
@@ -67,6 +76,10 @@ window.HalcyonModel = (() => {
 	function positive(value) {
 		const number = Number(value)
 		return Number.isFinite(number) && number > 0
+	}
+
+	function clamp(value, low, high) {
+		return Math.max(low, Math.min(high, value))
 	}
 
 	/** A texture sheet size, kept sane and falling back to the usual 64. */
@@ -632,9 +645,10 @@ window.HalcyonModel = (() => {
 	/**
 	 * Stacks several pictures into the one tall strip an animation is.
 	 *
-	 * Every frame has to be the same size, because a strip is read by cutting it into equal slices,
-	 * and a frame of a different size would shift every frame after it. The result is a png blob
-	 * ready to upload, so nobody has to assemble a sheet in an image editor.
+	 * A strip is read by cutting it into equal slices, so every frame has to end up the same size.
+	 * Frames that were saved smaller are not refused, they are fitted onto the largest frame: whole
+	 * number enlargement where it fits, which keeps pixel art perfectly sharp, and a plain fit where
+	 * it does not, always centred and never smoothed. The result is a png blob ready to upload.
 	 */
 	async function strip(images) {
 		const list = Array.from(images ?? [])
@@ -645,15 +659,10 @@ window.HalcyonModel = (() => {
 			throw new Error(`an animation holds at most ${MAX_FRAMES} frames`)
 		}
 
-		const width = list[0].naturalWidth
-		const height = list[0].naturalHeight
-		for (const image of list) {
-			if (image.naturalWidth !== width || image.naturalHeight !== height) {
-				throw new Error(
-					`every frame has to be the same size, and this one is ${image.naturalWidth}x${image.naturalHeight} ` +
-						`while the first is ${width}x${height}`,
-				)
-			}
+		const width = Math.max(...list.map((image) => image.naturalWidth))
+		const height = Math.max(...list.map((image) => image.naturalHeight))
+		if (width < 1 || height < 1) {
+			throw new Error("those pictures have no size the browser could read")
 		}
 
 		const canvas = document.createElement("canvas")
@@ -662,8 +671,28 @@ window.HalcyonModel = (() => {
 
 		const context = canvas.getContext("2d")
 		context.imageSmoothingEnabled = false
+
+		let fitted = 0
 		for (let index = 0; index < list.length; index += 1) {
-			context.drawImage(list[index], 0, index * height)
+			const image = list[index]
+			const top = index * height
+			if (image.naturalWidth === width && image.naturalHeight === height) {
+				context.drawImage(image, 0, top)
+				continue
+			}
+
+			fitted += 1
+			const whole = Math.min(Math.floor(width / image.naturalWidth), Math.floor(height / image.naturalHeight))
+			const factor = whole >= 1 ? whole : Math.min(width / image.naturalWidth, height / image.naturalHeight)
+			const drawWidth = Math.max(1, Math.round(image.naturalWidth * factor))
+			const drawHeight = Math.max(1, Math.round(image.naturalHeight * factor))
+			context.drawImage(
+				image,
+				Math.round((width - drawWidth) / 2),
+				top + Math.round((height - drawHeight) / 2),
+				drawWidth,
+				drawHeight,
+			)
 		}
 
 		const blob = await new Promise((resolve, reject) => {
@@ -676,7 +705,7 @@ window.HalcyonModel = (() => {
 			}, "image/png")
 		})
 
-		return { blob, width, height: height * list.length, frames: list.length }
+		return { blob, width, height: height * list.length, frames: list.length, fitted }
 	}
 
 	/**
@@ -763,82 +792,311 @@ window.HalcyonModel = (() => {
 	}
 
 	/**
-	 * Draws the model from the front onto a canvas, taking every box's picture out of the texture.
+	 * A plain player body, in the same pixels a model is drawn in, used as a ghost behind the piece.
 	 *
-	 * This is a flat front view rather than a rotating three dimensional one, which is what makes it
-	 * honest: it shows the actual pixels the game will put on those boxes, at the actual proportions,
-	 * without pretending to be the renderer.
-	 *
-	 * The options are the frame count of the strip and which frame to draw, so calling this on a
-	 * timer plays the animation.
+	 * This is the whole reason the preview is worth looking at. A wing on its own says nothing; a
+	 * wing next to a body says whether it is a shoulder wing or a two metre banner, and whether it
+	 * sits on the back or floats a foot behind it. Head top is at minus eight, the shoulders are at
+	 * zero and the feet are at twenty four, which is exactly how the game measures a player.
 	 */
-	function paint(canvas, model, image, options) {
-		const settings = options ?? {}
-		const total = Math.max(1, Math.round(Number(settings.frames ?? 1)))
-		const index = Math.max(0, Math.min(total - 1, Math.round(Number(settings.frame ?? 0))))
+	function bodyCubes() {
+		return [
+			{ x: -4, y: -8, z: -4, width: 8, height: 8, depth: 8 },
+			{ x: -4, y: 0, z: -2, width: 8, height: 12, depth: 4 },
+			{ x: -8, y: 0, z: -2, width: 4, height: 12, depth: 4 },
+			{ x: 4, y: 0, z: -2, width: 4, height: 12, depth: 4 },
+			{ x: -4, y: 12, z: -2, width: 4, height: 12, depth: 4 },
+			{ x: 0, y: 12, z: -2, width: 4, height: 12, depth: 4 },
+		]
+	}
 
+	/** The corner to corner extent of a list of boxes, so the view can be fitted around them. */
+	function spread(cubes) {
+		const low = [Infinity, Infinity, Infinity]
+		const high = [-Infinity, -Infinity, -Infinity]
+
+		for (const cube of cubes) {
+			low[0] = Math.min(low[0], cube.x)
+			low[1] = Math.min(low[1], cube.y)
+			low[2] = Math.min(low[2], cube.z)
+			high[0] = Math.max(high[0], cube.x + cube.width)
+			high[1] = Math.max(high[1], cube.y + cube.height)
+			high[2] = Math.max(high[2], cube.z + cube.depth)
+		}
+
+		if (low[0] === Infinity) {
+			return { low: [0, 0, 0], high: [1, 1, 1] }
+		}
+		return { low, high }
+	}
+
+	/** Turns a point around the model, first sideways and then a little forwards. */
+	function turn(point, view) {
+		const spunX = point[0] * view.cosYaw + point[2] * view.sinYaw
+		const spunZ = point[2] * view.cosYaw - point[0] * view.sinYaw
+		return [spunX, point[1] * view.cosPitch - spunZ * view.sinPitch, spunZ * view.cosPitch + point[1] * view.sinPitch]
+	}
+
+	/** Where a corner of the model lands on the canvas, and how far away it is. */
+	function place(point, view) {
+		const spun = turn([point[0] - view.centre[0], point[1] - view.centre[1], point[2] - view.centre[2]], view)
+		return { x: view.originX + spun[0] * view.scale, y: view.originY + spun[1] * view.scale, depth: spun[2] }
+	}
+
+	/**
+	 * The six faces of a box, each with the corner its texture starts at, the corner its texture runs
+	 * across to, the corner it runs down to, and the rectangle of the sheet it comes from.
+	 *
+	 * The rectangles are the box unwrap Minecraft has always used: the top and bottom of the box side
+	 * by side on the first row, and the right, front, left and back faces along the second.
+	 */
+	function facesOf(cube) {
+		const x0 = cube.x
+		const x1 = cube.x + cube.width
+		const y0 = cube.y
+		const y1 = cube.y + cube.height
+		const z0 = cube.z
+		const z1 = cube.z + cube.depth
+		const u = cube.u ?? 0
+		const v = cube.v ?? 0
+		const w = cube.width
+		const h = cube.height
+		const d = cube.depth
+
+		return [
+			{ normal: [0, 0, -1], origin: [x0, y0, z0], across: [x1, y0, z0], down: [x0, y1, z0], rect: [u + d, v + d, w, h] },
+			{ normal: [0, 0, 1], origin: [x1, y0, z1], across: [x0, y0, z1], down: [x1, y1, z1], rect: [u + d + w + d, v + d, w, h] },
+			{ normal: [1, 0, 0], origin: [x1, y0, z0], across: [x1, y0, z1], down: [x1, y1, z0], rect: [u, v + d, d, h] },
+			{ normal: [-1, 0, 0], origin: [x0, y0, z1], across: [x0, y0, z0], down: [x0, y1, z1], rect: [u + d + w, v + d, d, h] },
+			{ normal: [0, -1, 0], origin: [x0, y0, z0], across: [x1, y0, z0], down: [x0, y0, z1], rect: [u + d, v, w, d] },
+			{ normal: [0, 1, 0], origin: [x0, y1, z1], across: [x1, y1, z1], down: [x0, y1, z0], rect: [u + d + w, v, w, d] },
+		]
+	}
+
+	/** Draws one frame of the turning preview. */
+	function render(canvas, state) {
 		const context = canvas.getContext("2d")
+		if (context === null) {
+			return
+		}
+
+		context.setTransform(1, 0, 0, 1, 0, 0)
 		context.clearRect(0, 0, canvas.width, canvas.height)
 		context.imageSmoothingEnabled = false
 
-		const box = bounds(model)
-		const margin = 10
-		const scale = Math.max(
-			1,
-			Math.min(
-				(canvas.width - margin * 2) / Math.max(1, box.width),
-				(canvas.height - margin * 2) / Math.max(1, box.height),
-			),
-		)
-		const originX = (canvas.width - box.width * scale) / 2 - box.left * scale
-		const originY = (canvas.height - box.height * scale) / 2 - box.top * scale
+		const model = state.model
+		const ghost = state.body ? bodyCubes() : []
+		const box = spread([...model.cubes, ...ghost])
+		const size = [0, 1, 2].map((axis) => box.high[axis] - box.low[axis])
+		const radius = Math.max(4, Math.hypot(size[0], size[1], size[2]) / 2)
 
-		// One frame of the strip is the sheet the model was drawn against.
-		const sheetWidth = image === null ? model.textureWidth : image.naturalWidth
-		const sheetHeight = image === null ? model.textureHeight : image.naturalHeight / total
-		const top = index * sheetHeight
-		const perX = sheetWidth / model.textureWidth
-		const perY = sheetHeight / model.textureHeight
+		const view = {
+			cosYaw: Math.cos(state.yaw),
+			sinYaw: Math.sin(state.yaw),
+			cosPitch: Math.cos(state.pitch),
+			sinPitch: Math.sin(state.pitch),
+			centre: [0, 1, 2].map((axis) => (box.low[axis] + box.high[axis]) / 2),
+			scale: (Math.min(canvas.width, canvas.height) * 0.44) / radius,
+			originX: canvas.width / 2,
+			originY: canvas.height / 2,
+		}
 
-		// Boxes further back are drawn first, so a wing behind a body panel does not cover it.
-		const ordered = [...model.cubes].sort((left, right) => right.z - left.z)
-		for (const cube of ordered) {
-			const target = [
-				originX + cube.x * scale,
-				originY + cube.y * scale,
-				Math.max(1, cube.width * scale),
-				Math.max(1, cube.height * scale),
-			]
+		const image = state.image
+		const total = Math.max(1, state.frames)
+		const index = clamp(Math.round(state.frame), 0, total - 1)
+		const perX = image === null ? 1 : image.naturalWidth / Math.max(1, model.textureWidth)
+		const frameHeight = image === null ? 0 : image.naturalHeight / total
+		const perY = image === null ? 1 : frameHeight / Math.max(1, model.textureHeight)
+		const top = index * frameHeight
 
-			if (image === null || cube.width === 0 || cube.height === 0) {
-				context.fillStyle = "rgba(124, 92, 255, 0.35)"
-				context.fillRect(target[0], target[1], target[2], target[3])
+		const panels = []
+		const gather = (cube, textured) => {
+			for (const face of facesOf(cube)) {
+				if (textured && (face.rect[2] <= 0 || face.rect[3] <= 0)) {
+					continue
+				}
+				if (turn(face.normal, view)[2] >= 0) {
+					continue
+				}
+
+				const origin = place(face.origin, view)
+				const across = place(face.across, view)
+				const down = place(face.down, view)
+				const area = Math.abs((across.x - origin.x) * (down.y - origin.y) - (across.y - origin.y) * (down.x - origin.x))
+				if (!Number.isFinite(area) || area < 0.05) {
+					continue
+				}
+
+				panels.push({
+					depth: (origin.depth + across.depth + down.depth) / 3,
+					origin,
+					across,
+					down,
+					rect: textured ? face.rect : null,
+				})
+			}
+		}
+
+		for (const cube of ghost) {
+			gather(cube, false)
+		}
+		for (const cube of model.cubes) {
+			gather(cube, true)
+		}
+		panels.sort((left, right) => right.depth - left.depth)
+
+		for (const panel of panels) {
+			const corner = {
+				x: panel.across.x + panel.down.x - panel.origin.x,
+				y: panel.across.y + panel.down.y - panel.origin.y,
+			}
+
+			if (panel.rect === null || image === null) {
+				context.beginPath()
+				context.moveTo(panel.origin.x, panel.origin.y)
+				context.lineTo(panel.across.x, panel.across.y)
+				context.lineTo(corner.x, corner.y)
+				context.lineTo(panel.down.x, panel.down.y)
+				context.closePath()
+				context.fillStyle = panel.rect === null ? "rgba(124, 92, 255, 0.10)" : "rgba(124, 92, 255, 0.45)"
+				context.fill()
+				context.strokeStyle = "rgba(124, 92, 255, 0.28)"
+				context.lineWidth = 1
+				context.stroke()
 				continue
 			}
 
-			// The front face of a box uv sheet sits one depth in and one depth down.
-			const sourceX = (cube.u + cube.depth) * perX
-			const sourceY = top + (cube.v + cube.depth) * perY
-			const sourceW = cube.width * perX
-			const sourceH = cube.height * perY
+			const sourceX = panel.rect[0] * perX
+			const sourceY = top + panel.rect[1] * perY
+			const sourceW = Math.max(1, panel.rect[2] * perX)
+			const sourceH = Math.max(1, panel.rect[3] * perY)
 
+			context.setTransform(
+				(panel.across.x - panel.origin.x) / sourceW,
+				(panel.across.y - panel.origin.y) / sourceW,
+				(panel.down.x - panel.origin.x) / sourceH,
+				(panel.down.y - panel.origin.y) / sourceH,
+				panel.origin.x,
+				panel.origin.y,
+			)
 			try {
-				context.drawImage(
-					image,
-					sourceX,
-					sourceY,
-					Math.max(1, sourceW),
-					Math.max(1, sourceH),
-					target[0],
-					target[1],
-					target[2],
-					target[3],
-				)
+				// A hair of overdraw, so neighbouring faces do not show a seam between them.
+				context.drawImage(image, sourceX, sourceY, sourceW, sourceH, -0.05, -0.05, sourceW + 0.1, sourceH + 0.1)
 			} catch {
 				context.fillStyle = "rgba(124, 92, 255, 0.35)"
-				context.fillRect(target[0], target[1], target[2], target[3])
+				context.fillRect(0, 0, sourceW, sourceH)
 			}
+			context.setTransform(1, 0, 0, 1, 0, 0)
 		}
+	}
+
+	/** Lets the preview be turned with the mouse, which is attached to a canvas only once. */
+	function listen(canvas) {
+		canvas.style.cursor = "grab"
+		canvas.style.touchAction = "none"
+
+		canvas.addEventListener("pointerdown", (event) => {
+			const state = views.get(canvas)
+			if (state === undefined) {
+				return
+			}
+			state.dragging = true
+			state.pointerX = event.clientX
+			state.pointerY = event.clientY
+			canvas.style.cursor = "grabbing"
+			try {
+				canvas.setPointerCapture(event.pointerId)
+			} catch {
+				// Pointer capture is a convenience, not a requirement.
+			}
+		})
+
+		canvas.addEventListener("pointermove", (event) => {
+			const state = views.get(canvas)
+			if (state === undefined || !state.dragging) {
+				return
+			}
+			state.yaw += (event.clientX - state.pointerX) * 0.012
+			state.pitch = clamp(state.pitch + (event.clientY - state.pointerY) * 0.012, -1.2, 1.2)
+			state.pointerX = event.clientX
+			state.pointerY = event.clientY
+		})
+
+		const release = () => {
+			const state = views.get(canvas)
+			if (state === undefined) {
+				return
+			}
+			state.dragging = false
+			canvas.style.cursor = "grab"
+		}
+		canvas.addEventListener("pointerup", release)
+		canvas.addEventListener("pointercancel", release)
+		canvas.addEventListener("pointerleave", release)
+	}
+
+	/** Keeps the preview turning until the canvas goes away or is hidden. */
+	function ensureLoop(canvas) {
+		const state = views.get(canvas)
+		if (state === undefined || state.loop !== 0) {
+			return
+		}
+
+		const step = (now) => {
+			const current = views.get(canvas)
+			if (current === undefined) {
+				return
+			}
+			if (!canvas.isConnected || canvas.offsetParent === null) {
+				current.loop = 0
+				return
+			}
+
+			const elapsed = current.last === 0 ? 0 : Math.min(200, now - current.last)
+			current.last = now
+			if (!current.dragging) {
+				current.yaw += (elapsed / 1000) * SPIN
+			}
+			render(canvas, current)
+			current.loop = window.requestAnimationFrame(step)
+		}
+
+		state.last = 0
+		state.loop = window.requestAnimationFrame(step)
+	}
+
+	/**
+	 * Shows a model on a canvas, turning, textured, beside a ghost of a player.
+	 *
+	 * Calling this again with a different frame only updates what is drawn; the angle the piece has
+	 * been turned to is kept, so an animation does not reset the view sixty times a second.
+	 */
+	function paint(canvas, model, image, options) {
+		const settings = options ?? {}
+		const existing = views.get(canvas)
+		const state = existing ?? {
+			// Facing the back of the player to begin with, because that is where a wing is worn.
+			yaw: Math.PI * 0.82,
+			pitch: 0.22,
+			dragging: false,
+			pointerX: 0,
+			pointerY: 0,
+			loop: 0,
+			last: 0,
+		}
+
+		state.model = model
+		state.image = image ?? null
+		state.frames = Math.max(1, Math.round(Number(settings.frames ?? 1)))
+		state.frame = Math.max(0, Math.round(Number(settings.frame ?? 0)))
+		state.body = settings.body !== false
+
+		if (existing === undefined) {
+			views.set(canvas, state)
+			listen(canvas)
+		}
+		render(canvas, state)
+		ensureLoop(canvas)
 	}
 
 	/** Draws one frame of a picture that has no model, which is worn flat like a cape. */
@@ -847,7 +1105,9 @@ window.HalcyonModel = (() => {
 		const total = Math.max(1, Math.round(Number(settings.frames ?? 1)))
 		const index = Math.max(0, Math.min(total - 1, Math.round(Number(settings.frame ?? 0))))
 
+		views.delete(canvas)
 		const context = canvas.getContext("2d")
+		context.setTransform(1, 0, 0, 1, 0, 0)
 		context.clearRect(0, 0, canvas.width, canvas.height)
 		context.imageSmoothingEnabled = false
 		if (image === null || image === undefined) {
@@ -876,10 +1136,12 @@ window.HalcyonModel = (() => {
 	function describe(model) {
 		const box = bounds(model)
 		const count = model.cubes.length
+		const deep = model.cubes.reduce((most, cube) => Math.max(most, cube.z + cube.depth), 0)
 		return (
 			`${count} ${count === 1 ? "box" : "boxes"}, ` +
-			`${round(box.width)} by ${round(box.height)} pixels, ` +
-			`texture ${model.textureWidth}x${model.textureHeight}`
+			`${round(box.width)} wide by ${round(box.height)} tall, ` +
+			`${round(Math.max(0, deep))} behind the back, ` +
+			`texture ${model.textureWidth}x${model.textureHeight}. Drag the preview to turn it.`
 		)
 	}
 
@@ -898,6 +1160,7 @@ window.HalcyonModel = (() => {
 		mcmetaFor,
 		frames,
 		bounds,
+		bodyCubes,
 		paint,
 		paintFlat,
 		describe,
