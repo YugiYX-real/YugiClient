@@ -13,21 +13,22 @@ const PERSIST_DELAY_MS = 2000
 // Cosmetic ids end up in urls and file names, so they are kept to a short lowercase slug.
 const COSMETIC_ID = /^[a-z0-9][a-z0-9_-]{0,47}$/
 
-/** The most frames one cosmetic may be built from. Kept for records written by older builds. */
+/** The most frames one cosmetic may be built from. */
 const MAX_FRAMES = 64
 
 /**
  * Every kind of cosmetic the client knows how to wear.
  *
- * A slot is what actually decides what replaces what: capes and wings both hang off the back, so
- * wearing wings takes the cape off rather than drawing both through each other. A shield is its own
- * slot, because a shield on the back and a cape on the back would fight over the same space.
+ * One of every kind can be worn at the same time, so a cape and a pair of wings and a shield are
+ * all on the player at once and only a second cape replaces the first. The slot is still recorded
+ * because it is what tells the game where on the body to draw the thing.
+ *
  * Adding a new kind of cosmetic later is a line in this table and nothing else.
  */
 export const COSMETIC_TYPES = {
 	cape: { slot: "back", label: "Cape" },
-	wings: { slot: "back", label: "Wings" },
-	backpack: { slot: "back", label: "Backpack" },
+	wings: { slot: "wings", label: "Wings" },
+	backpack: { slot: "backpack", label: "Backpack" },
 	shield: { slot: "shield", label: "Shield" },
 	hat: { slot: "head", label: "Hat" },
 	halo: { slot: "halo", label: "Halo" },
@@ -36,6 +37,9 @@ export const COSMETIC_TYPES = {
 	aura: { slot: "aura", label: "Aura" },
 	trail: { slot: "trail", label: "Trail" },
 }
+
+/** Every kind, in the order the panel and the in game menu list them. */
+export const COSMETIC_TYPE_IDS = Object.keys(COSMETIC_TYPES)
 
 export const COSMETIC_SLOTS = Array.from(
 	new Set(Object.values(COSMETIC_TYPES).map((entry) => entry.slot)),
@@ -104,8 +108,9 @@ function normaliseAddress(value, fallback) {
 /**
  * The addresses of the pictures an older animated cosmetic was built from.
  *
- * Nothing writes these any more: a cosmetic is a model and a texture. They are still read so a
- * server that has been running since before models existed keeps showing what it already had.
+ * Nothing writes these any more: a cosmetic is a model, a texture and, when it moves, an animation
+ * mcmeta. They are still read so a server that has been running since before that keeps showing
+ * what it already had.
  */
 function normaliseFrameTextures(value) {
 	if (!Array.isArray(value)) {
@@ -152,12 +157,33 @@ export function playerKey(name) {
 	return typeof name === "string" ? name.trim().toLowerCase() : ""
 }
 
+/** Nothing worn, one entry per kind. */
 function emptyEquipped() {
 	const equipped = {}
-	for (const slot of COSMETIC_SLOTS) {
-		equipped[slot] = null
+	for (const type of COSMETIC_TYPE_IDS) {
+		equipped[type] = null
 	}
 	return equipped
+}
+
+/**
+ * The same thing keyed by the place on the body instead of by the kind.
+ *
+ * Older clients think in slots, and a renderer wants to know what hangs where, so this view is
+ * handed out beside the real one rather than replacing it.
+ */
+function slotsFrom(equipped) {
+	const slots = {}
+	for (const slot of COSMETIC_SLOTS) {
+		slots[slot] = null
+	}
+	for (const [type, id] of Object.entries(equipped)) {
+		const slot = slotOf(type)
+		if (id !== null && slots[slot] === null) {
+			slots[slot] = id
+		}
+	}
+	return slots
 }
 
 /** Keeps announcements to the shape every reader expects, and drops the empty ones. */
@@ -243,6 +269,7 @@ export class Store {
 			if (
 				record.slot === undefined ||
 				record.model === undefined ||
+				record.mcmeta === undefined ||
 				record.scale === undefined
 			) {
 				this.state.cosmetics[id] = this.shapeCosmetic(id, record, record)
@@ -250,11 +277,15 @@ export class Store {
 			}
 		}
 
-		for (const profile of Object.values(this.state.profiles)) {
+		for (const [key, profile] of Object.entries(this.state.profiles)) {
 			const equipped = profile.equipped ?? {}
-			if (equipped.back === undefined) {
-				// The old shape only ever had a cape, and a cape lives on the back.
-				profile.equipped = { ...emptyEquipped(), back: equipped.cape ?? null }
+			const byPlace = Object.keys(equipped).some(
+				(entry) => COSMETIC_TYPES[entry] === undefined,
+			)
+			if (byPlace || equipped.cape === undefined) {
+				// Reading the profile is what turns a record keyed by place into one keyed by
+				// kind, because it works out where each worn id belongs from the cosmetic itself.
+				profile.equipped = this.profile(profile.name ?? key).equipped
 				touched = true
 			}
 		}
@@ -380,7 +411,8 @@ export class Store {
 	cosmetics() {
 		return Object.values(this.state.cosmetics).sort(
 			(left, right) =>
-				String(left.type).localeCompare(String(right.type)) ||
+				COSMETIC_TYPE_IDS.indexOf(normaliseCosmeticType(left.type)) -
+					COSMETIC_TYPE_IDS.indexOf(normaliseCosmeticType(right.type)) ||
 				String(left.name).localeCompare(String(right.name)),
 		)
 	}
@@ -392,14 +424,23 @@ export class Store {
 	/**
 	 * Builds the stored shape of one cosmetic from whatever the panel sent.
 	 *
-	 * The two things that matter are the model and the texture. Everything else is either a label or
-	 * a small nudge on top of the coordinates the model was authored with.
+	 * Three files describe a cosmetic and nothing else does: the model, the texture, and the
+	 * animation mcmeta when it moves. Everything else here is either a label or a small nudge on
+	 * top of the coordinates the model was authored with.
 	 */
 	shapeCosmetic(id, entry, existing) {
 		const type = normaliseCosmeticType(entry.type ?? existing.type)
 		const placement = geometryOf(type)
 		const model = normaliseAddress(entry.model ?? existing.model, "")
+		const mcmeta = normaliseAddress(entry.mcmeta ?? existing.mcmeta, "")
 		const frameTextures = normaliseFrameTextures(entry.frameTextures ?? existing.frameTextures)
+		const animated = mcmeta !== "" || frameTextures.length > 1
+		const declared = clamp(
+			entry.frames ?? existing.frames,
+			1,
+			MAX_FRAMES,
+			frameTextures.length > 1 ? frameTextures.length : 1,
+		)
 
 		return {
 			id,
@@ -419,11 +460,16 @@ export class Store {
 			// A cosmetic without one is drawn on a flat panel, which is all a cape ever needs.
 			model,
 			hasModel: model !== "",
+			// The animation mcmeta, exactly the file Minecraft itself uses beside a texture. Its
+			// presence is what makes a cosmetic animated: the texture is then a tall strip of
+			// frames and this says how fast to play them.
+			mcmeta,
+			hasMcmeta: mcmeta !== "",
+			animated,
+			frames: animated ? Math.max(2, declared) : 1,
+			frameMs: clamp(entry.frameMs ?? existing.frameMs, 20, 5000, 100),
 			// Kept so a client built before models existed still gets what it expects.
 			frameTextures,
-			animated: frameTextures.length > 1,
-			frames: frameTextures.length > 1 ? frameTextures.length : 1,
-			frameMs: clamp(entry.frameMs ?? existing.frameMs, 20, 5000, 100),
 			// How the thing is worn, on top of its own coordinates.
 			scale: decimal(entry.scale ?? existing.scale, 0.1, 4, placement.scale),
 			offsetX: decimal(entry.offsetX ?? existing.offsetX, -2, 2, placement.offsetX),
@@ -465,9 +511,9 @@ export class Store {
 
 		for (const profile of Object.values(this.state.profiles)) {
 			profile.owned = (profile.owned ?? []).filter((owned) => owned !== key)
-			for (const [slot, worn] of Object.entries(profile.equipped ?? {})) {
+			for (const [type, worn] of Object.entries(profile.equipped ?? {})) {
 				if (worn === key) {
-					profile.equipped[slot] = null
+					profile.equipped[type] = null
 				}
 			}
 		}
@@ -476,25 +522,35 @@ export class Store {
 		return true
 	}
 
-	/** What a single player owns and wears. Unknown players simply own nothing. */
+	/**
+	 * What a single player owns and wears. Unknown players simply own nothing.
+	 *
+	 * What a worn id was filed under is not trusted: the kind of the cosmetic itself decides where
+	 * it belongs. That is what quietly turns a profile written when equipping was keyed by place
+	 * into one keyed by kind, without anybody losing what they were wearing.
+	 */
 	profile(name) {
 		const key = playerKey(name)
 		const stored = this.state.profiles[key] ?? {}
 		const owned = (stored.owned ?? []).filter((id) => this.state.cosmetics[id] !== undefined)
 		const equipped = emptyEquipped()
 
-		for (const [slot, worn] of Object.entries(stored.equipped ?? {})) {
-			if (equipped[slot] !== undefined && typeof worn === "string" && owned.includes(worn)) {
-				equipped[slot] = worn
+		for (const worn of Object.values(stored.equipped ?? {})) {
+			if (typeof worn !== "string" || !owned.includes(worn)) {
+				continue
 			}
+			equipped[normaliseCosmeticType(this.state.cosmetics[worn].type)] = worn
 		}
 
 		return {
 			name: stored.name ?? String(name).trim(),
 			owned,
+			// One entry per kind, so a cape and wings and a shield are all worn together.
 			equipped,
+			// The same thing keyed by the place on the body, for readers that think that way.
+			slots: slotsFrom(equipped),
 			// Older clients only ever looked at this one field.
-			cape: equipped.back,
+			cape: equipped.cape,
 		}
 	}
 
@@ -503,7 +559,9 @@ export class Store {
 		const stored = this.state.profiles[key] ?? { owned: [], equipped: emptyEquipped() }
 		stored.name = String(name).trim()
 		stored.owned = stored.owned ?? []
-		stored.equipped = { ...emptyEquipped(), ...(stored.equipped ?? {}) }
+		// Reading it back through profile keeps the record keyed by kind and drops anything that
+		// was filed under an old place name.
+		stored.equipped = { ...emptyEquipped(), ...this.profile(name).equipped }
 		this.state.profiles[key] = stored
 		return stored
 	}
@@ -531,9 +589,9 @@ export class Store {
 		}
 
 		stored.owned = (stored.owned ?? []).filter((owned) => owned !== cosmetic)
-		for (const [slot, worn] of Object.entries(stored.equipped ?? {})) {
+		for (const [type, worn] of Object.entries(stored.equipped ?? {})) {
 			if (worn === cosmetic) {
-				stored.equipped[slot] = null
+				stored.equipped[type] = null
 			}
 		}
 
@@ -542,21 +600,36 @@ export class Store {
 	}
 
 	/**
-	 * Puts a cosmetic on, or takes the slot off when the id is null. Returns null when the player
+	 * Puts a cosmetic on, or takes something off when the id is null. Returns null when the player
 	 * does not own the cosmetic, so a patched client cannot wear something it was never given.
+	 *
+	 * Wearing is one per kind. A cape, a pair of wings, a shield and a hat are all on the player at
+	 * the same time, and only a second cape takes the first one off.
 	 */
-	equip(name, id, slot) {
+	equip(name, id, which) {
 		const key = playerKey(name)
 		if (key === "") {
 			return null
 		}
 
 		const stored = this.ensureProfile(name)
+		const wanted = typeof which === "string" ? which.trim().toLowerCase() : ""
 
 		if (id === null) {
-			// No slot named means the caller is an older client, which only knew about capes.
-			const target = COSMETIC_SLOTS.includes(slot) ? slot : "back"
-			stored.equipped[target] = null
+			if (COSMETIC_TYPES[wanted] !== undefined) {
+				stored.equipped[wanted] = null
+			} else if (COSMETIC_SLOTS.includes(wanted)) {
+				// A place was named rather than a kind, so everything worn there comes off.
+				for (const type of COSMETIC_TYPE_IDS) {
+					if (slotOf(type) === wanted) {
+						stored.equipped[type] = null
+					}
+				}
+			} else {
+				// Neither, which is what an older client sent, and that only ever meant a cape.
+				stored.equipped.cape = null
+			}
+
 			this.schedulePersist()
 			return this.profile(name)
 		}
@@ -567,7 +640,7 @@ export class Store {
 			return null
 		}
 
-		stored.equipped[record.slot ?? slotOf(record.type)] = cosmetic
+		stored.equipped[normaliseCosmeticType(record.type)] = cosmetic
 		this.schedulePersist()
 		return this.profile(name)
 	}
@@ -585,12 +658,13 @@ export class Store {
 		return worn
 	}
 
-	/** The cape every online player is wearing, kept for clients built before slots existed. */
+	/** The cape every online player is wearing, kept for clients built before kinds existed. */
 	wornCapes() {
 		const worn = {}
-		for (const [name, slots] of Object.entries(this.worn())) {
-			if (typeof slots.back === "string") {
-				worn[name] = slots.back
+		for (const player of this.onlinePlayers()) {
+			const cape = this.profile(player.name).cape
+			if (typeof cape === "string" && cape !== "") {
+				worn[player.name] = cape
 			}
 		}
 		return worn
