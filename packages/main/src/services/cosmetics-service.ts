@@ -6,6 +6,11 @@ import type { CompanionService } from "./companion-service.ts"
 const TIMEOUT_MS = 8000
 const SESSION_COOKIE = "halcyon_session"
 
+/** The header of a png, where its size is written. */
+const PNG_HEADER_BYTES = 24
+const PNG_WIDTH_AT = 16
+const PNG_HEIGHT_AT = 20
+
 type RemoteCosmetic = {
 	readonly id?: unknown
 	readonly name?: unknown
@@ -14,7 +19,18 @@ type RemoteCosmetic = {
 	readonly texture?: unknown
 	readonly type?: unknown
 	readonly slot?: unknown
+	readonly model?: unknown
+	readonly hasModel?: unknown
+	readonly mcmeta?: unknown
 	readonly animated?: unknown
+	readonly frames?: unknown
+	readonly frameMs?: unknown
+}
+
+type Picture = {
+	readonly url: string
+	readonly width: number
+	readonly height: number
 }
 
 type CosmeticListPayload = { readonly cosmetics?: unknown }
@@ -42,6 +58,10 @@ function text(value: unknown, fallback = ""): string {
 	return typeof value === "string" ? value : fallback
 }
 
+function count(value: unknown, fallback: number): number {
+	return typeof value === "number" && Number.isFinite(value) ? value : fallback
+}
+
 function stringList(value: unknown): readonly string[] {
 	if (!Array.isArray(value)) {
 		return []
@@ -59,6 +79,19 @@ function records(value: unknown): readonly RemoteCosmetic[] {
 }
 
 /**
+ * The size written into the header of a png.
+ *
+ * The wardrobe needs it to show one frame of an animation rather than the whole strip squashed
+ * into a tile, and reading twenty four bytes is cheaper and steadier than decoding the picture.
+ */
+function pngSize(bytes: Buffer): { width: number; height: number } {
+	if (bytes.length < PNG_HEADER_BYTES) {
+		return { width: 0, height: 0 }
+	}
+	return { width: bytes.readUInt32BE(PNG_WIDTH_AT), height: bytes.readUInt32BE(PNG_HEIGHT_AT) }
+}
+
+/**
  * The launcher side of the cosmetics service.
  *
  * Two things make this more than a thin http wrapper. Textures are fetched here and handed to the
@@ -71,7 +104,7 @@ export class CosmeticsService {
 	private readonly auth: AuthService
 	private readonly companion: CompanionService
 	private readonly logger: Logger
-	private readonly textures = new Map<string, string>()
+	private readonly textures = new Map<string, Picture>()
 	private session: string | null = null
 	private sessionOwner: string | null = null
 
@@ -118,7 +151,7 @@ export class CosmeticsService {
 	}
 
 	/** Fetches a texture once and keeps it as a data url the window is allowed to draw. */
-	private async texture(path: string): Promise<string> {
+	private async texture(path: string): Promise<Picture> {
 		const cached = this.textures.get(path)
 		if (cached !== undefined) {
 			return cached
@@ -129,15 +162,21 @@ export class CosmeticsService {
 				signal: AbortSignal.timeout(TIMEOUT_MS),
 			})
 			if (!response.ok) {
-				return ""
+				return { url: "", width: 0, height: 0 }
 			}
+
 			const bytes = Buffer.from(await response.arrayBuffer())
-			const inlined = `data:image/png;base64,${bytes.toString("base64")}`
-			this.textures.set(path, inlined)
-			return inlined
+			const size = pngSize(bytes)
+			const picture: Picture = {
+				url: `data:image/png;base64,${bytes.toString("base64")}`,
+				width: size.width,
+				height: size.height,
+			}
+			this.textures.set(path, picture)
+			return picture
 		} catch (error) {
 			this.logger.debug(`The texture ${path} could not be downloaded`, error)
-			return ""
+			return { url: "", width: 0, height: 0 }
 		}
 	}
 
@@ -151,13 +190,24 @@ export class CosmeticsService {
 			if (id === "") {
 				continue
 			}
+
 			const path = text(entry.texture, `/v1/cosmetics/textures/${id}.png`)
+			const picture = await this.texture(path)
+			const declared = Math.max(1, Math.round(count(entry.frames, 1)))
+
 			result.push({
 				id,
 				name: text(entry.name, id),
 				description: text(entry.description),
 				rarity: text(entry.rarity, "common"),
-				textureUrl: await this.texture(path),
+				type: text(entry.type, "cape"),
+				textureUrl: picture.url,
+				textureWidth: picture.width,
+				textureHeight: picture.height,
+				// An animated piece always has at least two frames, whatever the record says.
+				frames: entry.animated === true ? Math.max(2, declared) : 1,
+				frameMs: Math.max(40, Math.round(count(entry.frameMs, 100))),
+				hasModel: entry.hasModel === true || text(entry.model) !== "",
 				owned: owned.has(id),
 			})
 		}
