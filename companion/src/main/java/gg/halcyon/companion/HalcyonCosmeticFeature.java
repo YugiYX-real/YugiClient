@@ -31,11 +31,12 @@ public final class HalcyonCosmeticFeature
 
 	private static volatile WeakReference<Object> wearer = new WeakReference<>(null);
 
-	private final HalcyonCosmeticModel model = HalcyonCosmeticModel.create();
+	private final HalcyonCosmeticModel model;
 
 	public HalcyonCosmeticFeature(
 			FeatureRendererContext<PlayerEntityRenderState, PlayerEntityModel> context) {
 		super(context);
+		this.model = HalcyonCosmeticModel.create(getContextModel()::getLayer);
 	}
 
 	/**

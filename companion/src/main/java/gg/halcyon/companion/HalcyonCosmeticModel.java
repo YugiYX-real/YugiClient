@@ -1,5 +1,6 @@
 package gg.halcyon.companion;
 
+import java.util.function.Function;
 import net.minecraft.client.model.Model;
 import net.minecraft.client.model.ModelData;
 import net.minecraft.client.model.ModelPart;
@@ -8,6 +9,7 @@ import net.minecraft.client.model.ModelPartData;
 import net.minecraft.client.model.ModelTransform;
 import net.minecraft.client.model.TexturedModelData;
 import net.minecraft.client.render.RenderLayer;
+import net.minecraft.util.Identifier;
 
 /**
  * A flat, double sided panel that carries one cosmetic picture.
@@ -21,13 +23,19 @@ public final class HalcyonCosmeticModel extends Model {
 	/** Edge length of the panel in model pixels. Sixteen model pixels make one block. */
 	public static final int SIZE = 24;
 
-	private HalcyonCosmeticModel(ModelPart root) {
-		super(root, RenderLayer::getEntityTranslucent);
+	private HalcyonCosmeticModel(ModelPart root, Function<Identifier, RenderLayer> layers) {
+		super(root, layers);
 	}
 
-	/** Builds a fresh panel. Cheap enough to own one per feature renderer. */
-	public static HalcyonCosmeticModel create() {
-		return new HalcyonCosmeticModel(build());
+	/**
+	 * Builds a fresh panel.
+	 *
+	 * <p>The render layer factory is handed in rather than picked here on purpose: this version of the
+	 * game no longer exposes the entity layers as static helpers, so the caller passes the factory of
+	 * the model it is decorating. The panel then lands on exactly the layer the player is drawn with.
+	 */
+	public static HalcyonCosmeticModel create(Function<Identifier, RenderLayer> layers) {
+		return new HalcyonCosmeticModel(build(), layers);
 	}
 
 	private static ModelPart build() {
