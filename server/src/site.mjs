@@ -18,6 +18,14 @@ const TYPES = {
 }
 
 /**
+ * The kinds of file that carry the behaviour of the site and must therefore never be kept by a
+ * browser. A page and the scripts and styles it pulls in are one thing that has to move together:
+ * keeping yesterday's script beside today's page is how a fixed panel goes on showing the old
+ * error for another hour after the server was updated.
+ */
+const LIVE = new Set([".html", ".js", ".css", ".json"])
+
+/**
  * Turns a request path into a file below the site root, or null when it escapes the root. Every
  * path is resolved and checked rather than merely sanitised, so no amount of dots or encoding can
  * reach outside the folder.
@@ -74,8 +82,9 @@ async function deliver(request, response, found, status) {
 	const head = {
 		"content-type": TYPES[extension] ?? "application/octet-stream",
 		"content-length": found.bytes,
-		// Pages must never be cached or a signed in visitor sees a stale shell; assets may be.
-		"cache-control": extension === ".html" ? "no-store" : "public, max-age=3600",
+		// Pages and the code they run are always fetched fresh, so an update to the server is an
+		// update to what every visitor sees on their next refresh. Pictures and fonts may be kept.
+		"cache-control": LIVE.has(extension) ? "no-store" : "public, max-age=3600",
 		"x-content-type-options": "nosniff",
 		"referrer-policy": "same-origin",
 	}
