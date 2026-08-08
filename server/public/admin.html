@@ -65,7 +65,7 @@
 						<div class="inline" style="margin-top: 0.9rem">
 							<div class="field">
 								<label for="u-version">Version</label>
-								<input id="u-version" placeholder="1.2.5" />
+								<input id="u-version" placeholder="1.2.7" />
 							</div>
 							<div class="field">
 								<label for="u-notes">What changed</label>
@@ -171,12 +171,15 @@
 						<div class="inline">
 							<div class="field">
 								<label for="c-model">Model, .bbmodel or .json</label>
-								<input id="c-model" type="file" accept=".bbmodel,.json,application/json" />
+								<input id="c-model" type="file" accept=".bbmodel,.json,application/json" multiple />
 								<div class="hint">
 									Save straight out of Blockbench. The boxes are read here in the browser
 									and stored in the small shape the client builds from, so the game never
 									has to understand Blockbench. Set the project to box uv and the piece
-									comes out exactly as you drew it.
+									comes out exactly as you drew it. A piece drawn as several modules, a
+									left wing and a right wing and a harness, can be picked all at once and
+									they are joined into one model. Every module has to be drawn against the
+									same texture sheet, because the piece wears one png.
 								</div>
 							</div>
 							<div class="field">
