@@ -1,5 +1,6 @@
 {
-  "tag": "v1.2.7",
-  "requestedAt": "2026-08-08T16:35:00Z",
-  "summary": "One of every kind of cosmetic is worn at a time, so a cape, a pair of wings and a shield are all on the player together and only a second cape takes the first one off. Wings and shields hang off the back tight against the body instead of hovering behind it. An animated cosmetic is one png with its frames stacked in it plus the ordinary Minecraft animation mcmeta, and the admin panel takes that third file and plays the piece in its preview before anything is published. A piece drawn as several Blockbench modules can be published as several model files at once, joined into one model."
+	"tag": "v1.2.8",
+	"name": "Halcyon 1.2.8",
+	"requestedAt": "2026-08-08T17:35:00Z",
+	"reason": "Several textures and gltf models in the admin panel, a file list you can delete from, animated previews in the wardrobe, and wings that hang on the body instead of under the ground"
 }
