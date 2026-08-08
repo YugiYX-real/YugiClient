@@ -7,12 +7,19 @@
  * space Minecraft entity models use, where y grows downwards, so the mod can hand them straight to
  * a model builder.
  *
+ * A piece is often drawn as several modules, a left wing and a right wing and a harness, each saved
+ * to its own file. Several files are read and joined into one model here, so the client still gets
+ * one list of boxes and one texture. They have to be drawn against the same texture sheet, because
+ * a cosmetic wears one png.
+ *
  * An animated cosmetic is one tall png with the frames stacked in it and an animation mcmeta beside
  * it, which is the same pair Minecraft uses for its own animated textures. That is why painting
  * takes a frame number: the picture of one frame is a window down the strip.
+ *
+ * This hangs off the window rather than a bare const so the other scripts on the page can reach it.
  */
 
-const HalcyonModel = (() => {
+window.HalcyonModel = (() => {
 	const FORMAT = "halcyon-model-1"
 	const MAX_CUBES = 128
 	const MAX_FRAMES = 64
@@ -115,6 +122,72 @@ const HalcyonModel = (() => {
 		return { format: FORMAT, textureWidth, textureHeight, cubes }
 	}
 
+	/** The part of a file name that is worth keeping in front of a box name. */
+	function stem(name) {
+		return String(name ?? "")
+			.replace(/\.[A-Za-z0-9]+$/, "")
+			.slice(0, 20)
+	}
+
+	/**
+	 * Joins several modules into the one model a cosmetic is.
+	 *
+	 * Every module has to be drawn against the same texture sheet, because the piece wears a single
+	 * png and a box takes its picture out of that sheet by pixel. Mixing sheets would quietly paint
+	 * the wrong pixels on half the piece, so it is refused with a sentence that says which two files
+	 * disagree.
+	 */
+	function merge(parts) {
+		const list = (parts ?? []).filter((part) => part !== null && part !== undefined)
+		if (list.length === 0) {
+			throw new Error("no model file was picked")
+		}
+		if (list.length === 1) {
+			return list[0].model
+		}
+
+		const first = list[0]
+		const cubes = []
+		let dropped = 0
+
+		for (const part of list) {
+			if (
+				part.model.textureWidth !== first.model.textureWidth ||
+				part.model.textureHeight !== first.model.textureHeight
+			) {
+				throw new Error(
+					`${part.name} is drawn against a ${part.model.textureWidth}x${part.model.textureHeight} texture ` +
+						`but ${first.name} uses ${first.model.textureWidth}x${first.model.textureHeight}, ` +
+						"and one cosmetic wears one png",
+				)
+			}
+
+			for (const cube of part.model.cubes) {
+				if (cubes.length >= MAX_CUBES) {
+					dropped += 1
+					continue
+				}
+				// The file a box came from is kept in front of its name, so a left wing and a right
+				// wing that both hold a box called "feather" stay tellable apart.
+				const label = cube.name === "" ? stem(part.name) : `${stem(part.name)}/${cube.name}`
+				cubes.push({ ...cube, name: label.slice(0, 40) })
+			}
+		}
+
+		if (dropped > 0) {
+			throw new Error(
+				`those files hold more than ${MAX_CUBES} boxes together, which is more than the client builds`,
+			)
+		}
+
+		return {
+			format: FORMAT,
+			textureWidth: first.model.textureWidth,
+			textureHeight: first.model.textureHeight,
+			cubes,
+		}
+	}
+
 	/** Reads a picked .bbmodel or .json file. */
 	async function fromFile(file) {
 		const text = await file.text()
@@ -125,6 +198,29 @@ const HalcyonModel = (() => {
 			throw new Error("that file is not readable json")
 		}
 		return normalise(json)
+	}
+
+	/**
+	 * Reads every picked model file and joins them into one piece.
+	 *
+	 * A file that cannot be read says which file it was, because picking six modules and being told
+	 * only "that file is not a model" is useless.
+	 */
+	async function fromFiles(files) {
+		const list = Array.from(files ?? [])
+		if (list.length === 0) {
+			throw new Error("no model file was picked")
+		}
+
+		const parts = []
+		for (const file of list) {
+			try {
+				parts.push({ name: file.name, model: await fromFile(file) })
+			} catch (error) {
+				throw new Error(list.length === 1 ? error.message : `${file.name}: ${error.message}`)
+			}
+		}
+		return merge(parts)
 	}
 
 	/**
@@ -323,9 +419,12 @@ const HalcyonModel = (() => {
 
 	return {
 		FORMAT,
+		MAX_CUBES,
 		MAX_FRAMES,
 		normalise,
+		merge,
 		fromFile,
+		fromFiles,
 		mcmetaFromFile,
 		frames,
 		bounds,
