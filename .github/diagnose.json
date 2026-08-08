@@ -1,4 +1,4 @@
 {
-	"requestedAt": "2026-08-08T00:05:00Z",
-	"reason": "Lint the gif decoder, the animation endpoint, the wing geometry on the cosmetic record and the rebuilt admin panel"
+	"requestedAt": "2026-08-08T17:55:00Z",
+	"reason": "Lint the model reader that now finds boxes in bedrock geometry, jem and mesh files as well"
 }
